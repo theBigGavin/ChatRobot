@@ -1,54 +1,74 @@
-# React + TypeScript + Vite
+# ChatRobot (open_ic)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A web application featuring a chat interface with a customizable 3D robot avatar, built with React, TypeScript, Vite, and Three.js.
 
-Currently, two official plugins are available:
+## ✨ Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Interactive chat interface.
+- Real-time 3D visualization of a robot model.
+- Customization controls for different robot parts (head, torso, arms, legs).
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Frontend:** React 19, TypeScript
+- **Build Tool:** Vite
+- **3D Rendering:** Three.js, @react-three/fiber, @react-three/drei
+- **Linting:** ESLint
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js (v18 or later recommended)
+- Yarn (v1.22 or later)
+
+### Installation
+
+1.  Clone the repository:
+    ```bash
+    git clone git@github.com:theBigGavin/ChatRobot.git
+    ```
+2.  Navigate to the project directory:
+    ```bash
+    cd ChatRobot
+    ```
+3.  Install dependencies:
+    ```bash
+    yarn install
+    ```
+
+### Running the Development Server
+
+To start the development server with Hot Module Replacement (HMR):
+
+```bash
+yarn dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open your browser and navigate to the URL provided (usually `http://localhost:5173`).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 📦 Building for Production
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
+To create an optimized production build:
+
+```bash
+yarn build
 ```
+
+The output files will be generated in the `dist/` directory. You can preview the production build locally using:
+
+```bash
+yarn preview
+```
+
+## ✨ Linting
+
+To check the code for linting errors:
+
+```bash
+yarn lint
+```
+
+## 📄 License
+
+This project is currently unlicensed.
