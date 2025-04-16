@@ -36,10 +36,11 @@ export default defineConfig(({ mode }) => { // Use function form to access mode
       } : undefined // Set proxy to undefined if URL is missing
     },
     build: { // Add build configuration
+      // minify: false, // Re-enable default minification
       chunkSizeWarningLimit: 1000, // Increase limit to 1000 kB
       rollupOptions: {
         output: {
-          manualChunks(id: string) {
+          manualChunks(id: string) { // Restore manualChunks
             // Separate vendor libraries into chunks
             if (id.includes('node_modules')) {
               // Extract package name more robustly
