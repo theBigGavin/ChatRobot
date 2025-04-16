@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => { // Use function form to access mode
   }
 
   return {
+    base: '/ChatRobot/', // Set base path for GitHub Pages deployment
     plugins: [react()],
     server: {
       proxy: llmApiUrl ? { // Only configure proxy if URL is defined
