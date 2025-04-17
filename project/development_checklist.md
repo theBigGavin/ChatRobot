@@ -2,10 +2,10 @@
 
 ## Iteration 0: 环境搭建与基础
 
-- [ ] **Story 0.1:** 初始化 React + TypeScript 项目 (使用 Vite)。
-- [ ] **Story 0.2:** 安装并配置核心依赖库。
-- [ ] **Story 0.3:** 建立基础项目结构。
-- [ ] **Story 0.4:** 设置基础后端代理端点 (用于测试)。
+- [x] **Story 0.1:** 初始化 React + TypeScript 项目 (使用 Vite)。 (Assumed pre-existing)
+- [x] **Story 0.2:** 安装并配置核心依赖库。
+- [x] **Story 0.3:** 建立基础项目结构。
+- [ ] **Story 0.4:** 设置基础后端代理端点 (用于测试)。 (Frontend call added, backend not implemented)
 
 ## Iteration 1: MVP - 核心界面与机器人展示
 
@@ -25,7 +25,7 @@
 
 - [x] **Story 3.1:** 实现用户消息输入与发送。
 - [x] **Story 3.2:** 实现聊天历史记录展示。
-- [x] **Story 3.3:** 集成后端代理调用 AI。
+- [x] **Story 3.3:** 集成后端代理调用 AI。 (Frontend call added)
 - [x] **Story 3.4:** 展示 AI 回复。
 
 ## Iteration 4: 氛围增强 - 视觉效果 (CRT & 仪表)
