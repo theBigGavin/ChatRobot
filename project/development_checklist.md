@@ -5,7 +5,7 @@
 - [x] **Story 0.1:** 初始化 React + TypeScript 项目 (使用 Vite)。 (Assumed pre-existing)
 - [x] **Story 0.2:** 安装并配置核心依赖库。
 - [x] **Story 0.3:** 建立基础项目结构。
-- [ ] **Story 0.4:** 设置基础后端代理端点 (用于测试)。 (Frontend call added, backend not implemented)
+- [x] **Story 0.4:** 设置基础后端代理端点 (用于测试)。 (Backend implemented and integrated)
 
 ## Iteration 1: MVP - 核心界面与机器人展示
 
@@ -71,6 +71,6 @@
 - [ ] **Story 9.6:** 实现动态仪表盘动画。
 - [ ] **Story 9.7:** 实现物理控件交互与反馈。
 - [ ] **Story 9.8:** 加入背景环境音。
-- [ ] **Story 9.9:** 扩展部件库 (添加更多模型)。
+- [x] **Story 9.9:** 扩展部件库 (添加更多模型)。 (Added robot2 model)
 - [ ] **Story 9.10:** 优化语音同步 (迁移至带时间戳的 TTS)。
 - [ ] ... (根据优先级和资源继续添加)
