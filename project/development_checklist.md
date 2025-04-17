@@ -66,7 +66,7 @@
 - [x] **Story 9.1:** 实现同步率系统 (仪表、计算、基础奖励)。 (Meter display & basic calculation done)
 - [x] **Story 9.2:** 实现机器人入场动画 (根据性格)。
 - [x] **Story 9.3:** 实现表情动作联动 (Emoji 解析与动画触发)。
-- [ ] **Story 9.4:** 实现简化记忆模块 (本地存储用户称呼)。
+- [x] **Story 9.4:** 实现简化记忆模块 (本地存储用户称呼)。 (Frontend done, requires backend update for full effect)
 - [ ] **Story 9.5:** 完善 CRT 视觉效果 (干扰、抖动等)。
 - [ ] **Story 9.6:** 实现动态仪表盘动画。
 - [ ] **Story 9.7:** 实现物理控件交互与反馈。
