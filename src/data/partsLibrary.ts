@@ -50,7 +50,7 @@ export const initialPartsLibrary: PartDefinition[] = [
     id: 'arms_placeholder_b',
     name: 'Placeholder Arms B',
     type: 'arms',
-    modelPath: '/assets/models/placeholder_arms_b.gltf', // Use absolute path from public
+    modelPath: '/assets/models/placeholder_arms_b.glb', // Use absolute path from public, update extension
     rarity: 'common',
     tags: ['Pincer'],
   },

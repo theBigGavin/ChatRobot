@@ -188,12 +188,22 @@ export const useAppStore = create<AppState>((set) => ({
       };
     }),
 
-  updateMessageText: (messageId: string, newText: string) =>
-    set((state) => ({
-      chatHistory: state.chatHistory.map((msg) =>
-        msg.id === messageId ? { ...msg, text: newText } : msg
-      ),
-    })),
+  updateMessageText: (messageId: string, textToAppend: string) => // Rename for clarity
+    set((state) => {
+      // Log before update
+      console.log(`[Zustand DEBUG] updateMessageText called for ID: ${messageId}, Appending: "${textToAppend}"`); // Uncommented
+      const newChatHistory = state.chatHistory.map((msg) => {
+        if (msg.id === messageId) {
+          const updatedText = msg.text + textToAppend;
+          console.log(`[Zustand DEBUG] Updating message ${messageId}. Old text: "${msg.text}", New text: "${updatedText}"`); // Uncommented
+          return { ...msg, text: updatedText };
+        }
+        return msg;
+      });
+      // Log after update (or rather, the state that will be set)
+      console.log(`[Zustand DEBUG] New chatHistory length: ${newChatHistory.length}`); // Uncommented
+      return { chatHistory: newChatHistory };
+    }),
 
 }));
 

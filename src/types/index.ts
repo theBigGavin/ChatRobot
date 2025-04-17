@@ -40,6 +40,12 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+// Define the structure for AI message history (compatible with backend)
+export interface AIMessage {
+  role: 'user' | 'assistant'; // System messages are handled differently
+  content: string;
+}
+
 // Define the structure for the robot's state (including sync rate, memory)
 export interface RobotState {
   syncRate: number; // 0-100
@@ -86,4 +92,23 @@ export interface AppState {
   setUserName: (name: string) => void;
   updateMessageText: (messageId: string, newText: string) => void; // <<< ADDED action signature
   // other actions...
+}
+
+// --- WebSocket Message Types ---
+
+// Define the structure of messages received from the server via WebSocket
+export interface ServerMessage {
+  type: "chunk" | "error" | "fullResponse" | "processing" | "idle";
+  payload: string;
+}
+
+// Define the structure of messages sent to the server via WebSocket
+export interface ClientChatMessage {
+  type: "chat";
+  payload: {
+    userInput: string;
+    personalityCore: string;
+    history: AIMessage[]; // Re-use AIMessage type defined above
+    userName?: string;
+  };
 }

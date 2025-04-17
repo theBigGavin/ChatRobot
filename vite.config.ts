@@ -7,33 +7,30 @@ export default defineConfig(({ mode }) => { // Use function form to access mode
   // process.cwd() gives the project root directory
   const env = loadEnv(mode, process.cwd(), '');
 
-  const llmApiUrl = env.VITE_LLM_API_URL; // Get the target URL
+  // Get backend port, default to 3001
+  const backendPort = env.BACKEND_PORT || '3001';
+  const backendTarget = `http://localhost:${backendPort}`;
 
+  // We still need llmApiUrl and key for the backend, but proxy targets the local backend
+  const llmApiUrl = env.VITE_LLM_API_URL;
   if (!llmApiUrl) {
-    console.warn('VITE_LLM_API_URL is not defined in .env file. Proxy for /api will not be configured.');
+    console.warn('VITE_LLM_API_URL is not defined in .env file. Backend might not be able to reach AI service.');
   }
 
   return {
     // base: '/ChatRobot/', // Commented out for local development. Re-enable or adjust for deployment.
     plugins: [react()],
     server: {
-      proxy: llmApiUrl ? { // Only configure proxy if URL is defined
-        // Proxy requests starting with /api directly to the remote LLM service URL
+      proxy: {
+        // Proxy requests starting with /api to the local backend server
         '/api': {
-          target: llmApiUrl, // Use the URL from .env
-          changeOrigin: true, // Needed for virtual hosted sites
-          secure: false, // Often needed for self-signed certs or specific proxy setups, but use with caution. Can be true if target has valid cert.
-          // Rewrite the path: replace /api/chat with the target path *relative* to the target URL
-          // Since target already includes /v1, we only need /chat/completions here.
-          rewrite: (path) => path.replace(/^\/api\/chat$/, '/chat/completions'),
-          // Add the Authorization header using the API key from .env
-          // Even though VITE_LLM_AUTH_SCHEMA was None, the error indicates the target needs it.
-          // We assume 'Bearer' schema as it's most common for OpenAI compatible APIs.
-          headers: {
-            'Authorization': `Bearer ${env.VITE_LLM_API_KEY}`
-          }
+          target: backendTarget, // Target the local backend
+          changeOrigin: true, // Recommended for avoiding CORS issues in some cases
+          secure: false, // Assuming local backend is http
+          // No rewrite needed, send /api/chat as is to the backend
+          // No headers needed here, backend handles auth with external service
         }
-      } : undefined // Set proxy to undefined if URL is missing
+      }
     },
     build: { // Add build configuration
       // minify: false, // Re-enable default minification

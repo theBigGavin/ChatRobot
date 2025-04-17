@@ -1,15 +1,25 @@
-import React, { useState, KeyboardEvent, useEffect, useRef } from "react";
+import React, {
+  useState, // Keep for inputValue
+  KeyboardEvent, // Keep for handleKeyDown
+  useEffect, // Keep for scrolling and focusing
+  useRef, // Keep for historyEndRef and inputRef
+  // useCallback, // Remove if no longer needed after refactor
+} from "react";
 import {
   useAppStore,
   selectChatHistory,
-  selectRobotConfig,
+  // selectRobotConfig, // Moved to useChatHandler
   selectGameState,
-  selectIsSpeaking,
-  // selectUserName, // Removed as it's no longer used directly
-  // Import the new action hook
 } from "../store/useAppStore";
-import type { ChatMessage, EmoteAction } from "../types";
+import type {
+  ChatMessage,
+  // EmoteAction, // No longer needed here
+  // AIMessage, // No longer needed here
+  // ServerMessage, // No longer needed directly
+  // ClientChatMessage, // No longer needed directly
+} from "../types";
 import { Howl } from "howler";
+import useChatHandler from "../hooks/useChatHandler"; // <-- Import the main handler hook
 
 // --- Sound Definitions ---
 const sounds = {
@@ -26,23 +36,11 @@ const sounds = {
   commandSuccess: new Howl({
     src: ["assets/sounds/command_success.mp3"],
     volume: 0.7,
-  }), // Sound for command
+  }),
 };
 // --- End Sound Definitions ---
 
-// --- Emoji to Emote Mapping ---
-const emojiToEmoteMap: Record<string, EmoteAction> = {
-  "😊": "smile",
-  "🙂": "smile",
-  "😄": "laugh",
-  "😂": "laugh",
-  "🤔": "think",
-  "😔": "sad",
-  "😞": "sad",
-  "👋": "wave",
-  "👍": "nod",
-};
-// --- End Emoji Mapping ---
+// --- Emoji to Emote Mapping (Moved to utils) ---
 
 // CSS for blinking cursor effect
 const cursorBlinkStyle = `
@@ -51,47 +49,38 @@ const cursorBlinkStyle = `
 .blinking-cursor-hidden::after { visibility: hidden; }
 `;
 
-// Helper function to strip basic Markdown
-const stripMarkdown = (text: string): string => {
-  text = text.replace(/(\*\*|__)(.*?)\1/g, "$2");
-  text = text.replace(/(\*|_)(.*?)\1/g, "$2");
-  text = text.replace(/^#+\s*/gm, "");
-  text = text.replace(/\[(.*?)\]\(.*?\)/g, "$1");
-  text = text.replace(/`(.*?)`/g, "$1");
-  text = text.replace(/```[\s\S]*?```/g, "");
-  text = text.replace(/^(---|___|\*\*\*)\s*$/gm, "");
-  text = text.replace(/^>\s*/gm, "");
-  text = text.replace(/^(\*|-|\+)\s+/gm, "");
-  text = text.replace(/\n{2,}/g, "\n");
-  return text.trim();
-};
+// Helper function to strip basic Markdown (Moved)
 
-// Helper function to find the first relevant Emoji
-const findFirstEmoteTrigger = (text: string): EmoteAction | null => {
-  for (const emoji in emojiToEmoteMap) {
-    if (text.includes(emoji)) return emojiToEmoteMap[emoji];
-  }
-  return null;
-};
+// Helper function to find the first relevant Emoji (Moved)
+
+// --- WebSocket Configuration (Moved) ---
 
 const ChatConsole: React.FC = () => {
   const [inputValue, setInputValue] = useState("");
   const addChatMessage = useAppStore((store) => store.addChatMessage);
   const updateSyncRate = useAppStore((store) => store.updateSyncRate);
-  const triggerEmote = useAppStore((store) => store.triggerEmote);
-  const setUserName = useAppStore((store) => store.setUserName);
-  const updateMessageText = useAppStore((store) => store.updateMessageText); // <<< Get the new action
-  const chatHistory = useAppStore(selectChatHistory);
-  const robotConfig = useAppStore(selectRobotConfig);
-  const gameState = useAppStore(selectGameState);
-  const isSpeaking = useAppStore(selectIsSpeaking);
-  const setIsSpeaking = useAppStore((store) => store.setIsSpeaking);
-  // const userName = useAppStore(selectUserName); // Removed: Get latest name directly in sendMessageAndGetResponse
-  const historyEndRef = useRef<HTMLDivElement>(null);
-  const [isBotProcessing, setIsBotProcessing] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const streamIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // const triggerEmote = useAppStore((store) => store.triggerEmote); // Moved
+  const setUserName = useAppStore((store) => store.setUserName); // Keep for detectAndSaveName
+  // const updateMessageText = useAppStore((store) => store.updateMessageText); // Moved
+  const chatHistory = useAppStore(selectChatHistory); // Keep for UI rendering
+  // const robotConfig = useAppStore(selectRobotConfig); // Moved to useChatHandler
+  const gameState = useAppStore(selectGameState); // Keep for UI logic (focus, disable)
+  const historyEndRef = useRef<HTMLDivElement>(null); // Keep for scrolling
+  const inputRef = useRef<HTMLInputElement>(null); // Keep for focusing input
+  const currentBotMessageId = useRef<string | null>(null); // Keep for cursor logic - TODO: Consider moving this state into useChatHandler too
+
+  // --- Instantiate the Main Chat Handler Hook ---
+  const { isConnected, isBotProcessing, submitUserMessage } = useChatHandler();
+
+  // --- Removed Old Hooks Instantiation ---
+  // --- Removed Old Callbacks (handleAnimationComplete, handleWebSocketMessage) ---
+  // --- Removed Old Functions (sendMessageToServer) ---
+  // const ws = useRef<WebSocket | null>(null); // <-- Remove old ws ref
+  // const [isConnected, setIsConnected] = useState(false); // <-- Remove old isConnected state
+  // Remove local state for streaming text
+  // const [streamingDisplayText, setStreamingDisplayText] = useState<string>("");
+
+  // --- Removed Old Logic Sections ---
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(event.target.value);
@@ -100,151 +89,13 @@ const ChatConsole: React.FC = () => {
   useEffect(() => {
     historyEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatHistory]);
+
   useEffect(() => {
-    if (gameState === "idle" && !isBotProcessing) inputRef.current?.focus();
-  }, [isBotProcessing, gameState]);
+    if (gameState === "idle" && !isBotProcessing && isConnected)
+      inputRef.current?.focus();
+  }, [isBotProcessing, gameState, isConnected]);
 
-  // Function to simulate streaming text effect
-  const streamText = (
-    messageId: string,
-    fullText: string,
-    callback?: () => void
-  ) => {
-    let currentIndex = 0;
-    const averageCharTime = 50;
-    if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
-    streamIntervalRef.current = setInterval(() => {
-      currentIndex++;
-      const currentText = fullText.substring(0, currentIndex);
-      // Call the action to update the specific message text
-      updateMessageText(messageId, currentText);
-      // Removed direct setState call
-      if (currentIndex >= fullText.length) {
-        if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
-        streamIntervalRef.current = null;
-        callback?.();
-      }
-    }, averageCharTime);
-  };
-
-  // Function to speak text using Web Speech API
-  const speak = (text: string, onEndCallback?: () => void) => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const plainText = stripMarkdown(text);
-      const utterance = new SpeechSynthesisUtterance(plainText);
-      utterance.lang = "en-US";
-      utterance.rate = robotConfig.voiceParams.rate || 1.0;
-      utterance.pitch = robotConfig.voiceParams.pitch || 1.0;
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        utteranceRef.current = null;
-        onEndCallback?.();
-      };
-      utterance.onerror = (event) => {
-        console.error("Speech synthesis error:", event.error);
-        setIsSpeaking(false);
-        utteranceRef.current = null;
-        onEndCallback?.();
-      };
-      utteranceRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
-    } else {
-      console.warn("Web Speech Synthesis API not supported.");
-      onEndCallback?.();
-    }
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-      if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
-    };
-  }, []);
-
-  const sendMessageAndGetResponse = async (userText: string) => {
-    setIsBotProcessing(true);
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-    setIsSpeaking(false);
-    if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
-    triggerEmote(null);
-
-    // Get the latest user name and history from the store *right before* the API call
-    const currentUserName =
-      useAppStore.getState().robotState.memory.userName || "User";
-    const currentChatHistory = useAppStore.getState().chatHistory;
-    const apiHistory = currentChatHistory.map((msg) => ({
-      role: msg.sender === "user" ? "user" : "assistant",
-      content: msg.text,
-    }));
-    apiHistory.push({ role: "user", content: userText });
-
-    const botMessageId = `msg-${Date.now()}-${Math.random()}`;
-    const placeholderMessage: ChatMessage = {
-      id: botMessageId,
-      sender: "bot",
-      text: "",
-      timestamp: Date.now(),
-    };
-    addChatMessage(placeholderMessage);
-
-    let streamFinished = false;
-    let speechFinished = false;
-    const checkCompletion = () => {
-      if (streamFinished && speechFinished) setIsBotProcessing(false);
-    };
-
-    try {
-      console.log("Sending to API:", {
-        userText,
-        personality: robotConfig.personalityCore,
-        userName: currentUserName,
-      });
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userInput: userText,
-          personalityCore: robotConfig.personalityCore,
-          history: apiHistory.slice(-10),
-          userName: currentUserName,
-        }), // Send user name
-      });
-      if (!response.ok)
-        throw new Error(`API request failed with status ${response.status}`);
-      const data = await response.json();
-      const botReplyText =
-        data.robotResponse || "Sorry, I couldn't get a response.";
-      console.log("Bot response received:", botReplyText);
-      const detectedEmote = findFirstEmoteTrigger(botReplyText);
-      if (detectedEmote) {
-        console.log("Triggering emote:", detectedEmote);
-        triggerEmote(detectedEmote);
-      }
-      streamText(botMessageId, botReplyText, () => {
-        streamFinished = true;
-        checkCompletion();
-      });
-      speak(botReplyText, () => {
-        speechFinished = true;
-        checkCompletion();
-      });
-    } catch (error) {
-      console.error("Error fetching bot response:", error);
-      const errorText = `Error: ${(error as Error).message}`;
-      useAppStore.setState((state) => ({
-        chatHistory: state.chatHistory.map((msg) =>
-          msg.id === botMessageId ? { ...msg, text: errorText } : msg
-        ),
-      }));
-      setIsBotProcessing(false);
-      setIsSpeaking(false);
-    }
-  };
-
-  // Removed handleCommand function as we'll use natural language detection
+  // --- Removed sendMessageToServer function ---
 
   // Function to detect if the user is stating their name
   const detectAndSaveName = (text: string): boolean => {
@@ -254,14 +105,11 @@ const ChatConsole: React.FC = () => {
       /i am ([\w\s]+)/i,
       /call me ([\w\s]+)/i,
     ];
-
     for (const pattern of namePatterns) {
       const match = text.match(pattern);
-      // Ensure the match is not just "I'm" or "I am" without a name following
       if (match && match[1] && match[1].trim().length > 0) {
         const detectedName = match[1].trim();
         setUserName(detectedName);
-        // Add a system message to confirm
         const systemMessage: ChatMessage = {
           id: `msg-${Date.now()}-system`,
           sender: "system",
@@ -269,12 +117,12 @@ const ChatConsole: React.FC = () => {
           timestamp: Date.now(),
         };
         addChatMessage(systemMessage);
-        sounds.commandSuccess.play(); // Reuse command success sound
+        sounds.commandSuccess.play();
         console.log(`Username detected and set to: ${detectedName}`);
-        return true; // Name detected and saved
+        return true;
       }
     }
-    return false; // No name detected
+    return false;
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -283,14 +131,15 @@ const ChatConsole: React.FC = () => {
     if (
       event.key === "Enter" &&
       inputValue.trim() &&
-      !isBotProcessing &&
+      !isBotProcessing && // Get state from useChatHandler
+      isConnected && // Get state from useChatHandler
       gameState === "idle"
     ) {
       event.preventDefault();
       const inputText = inputValue.trim();
-      setInputValue(""); // Clear input immediately
+      setInputValue(""); // Clear local input state
 
-      // Add user message to history FIRST
+      // Add user message to history (Keep this here for immediate UI update)
       const userMessage: ChatMessage = {
         id: `msg-${Date.now()}-${Math.random()}`,
         sender: "user",
@@ -299,32 +148,22 @@ const ChatConsole: React.FC = () => {
       };
       addChatMessage(userMessage);
 
-      // Check if the user stated their name
+      // Detect name (Keep this UI-related logic here for now)
       const nameWasSet = detectAndSaveName(inputText);
+      if (!nameWasSet) sounds.sendMessage.play();
 
-      // If name was set, don't send this specific message to AI (optional, avoids redundant processing)
-      // Or, always send to AI regardless. Let's send it for now.
-      // if (nameWasSet) {
-      //   return;
-      // }
-
-      // Play send sound only if it wasn't a name-setting message (or play always?)
-      if (!nameWasSet) {
-        sounds.sendMessage.play();
-      }
-
-      // Always increase sync rate and send to AI
+      // Update sync rate (Keep this UI-related logic here for now)
       const syncIncreaseAmount = 0.5;
       updateSyncRate(syncIncreaseAmount);
       console.log(`Sync rate increased by ${syncIncreaseAmount}`);
-      sendMessageAndGetResponse(inputText);
+
+      // Submit message using the handler hook
+      submitUserMessage(inputText); // Use function from useChatHandler
     }
   };
 
-  const isInputDisabled = isBotProcessing || gameState !== "idle";
-
-  // Removed debug log
-  // console.log("Rendering ChatConsole, chatHistory:", chatHistory);
+  const isInputDisabled =
+    isBotProcessing || gameState !== "idle" || !isConnected;
 
   return (
     <div
@@ -350,7 +189,8 @@ const ChatConsole: React.FC = () => {
           fontWeight: "bold",
         }}
       >
-        Chat Console
+        Chat Console{" "}
+        {!isConnected && <span style={{ color: "red" }}>(Disconnected)</span>}
       </p>
       <div
         style={{
@@ -364,45 +204,35 @@ const ChatConsole: React.FC = () => {
           padding: "5px",
         }}
       >
-        {chatHistory.map(
-          (
-            message // Restore original map structure without log
-          ) => (
-            <div
-              key={message.id}
-              style={{
-                marginBottom: "3px",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-              }}
-            >
-              {message.sender === "user" && (
-                <span>
-                  <span style={{ color: "#aaa" }}>{"⚙>"}</span> {message.text}
-                </span>
-              )}
-              {message.sender === "bot" && (
-                <span>
-                  <span style={{ color: "#aaa" }}>{"⚡:"}</span> {message.text}
-                </span>
-              )}
-              {message.sender === "system" && (
-                <span style={{ color: "#ffcc00" }}>* {message.text} *</span>
-              )}{" "}
-              {/* System message style */}
-            </div>
-          )
-        )}
-        {isBotProcessing && !isSpeaking && (
-          <div style={{ color: "#aaa", fontStyle: "italic" }}>
-            Bot is processing/streaming...
+        {chatHistory.map((message) => (
+          <div
+            key={message.id}
+            style={{
+              marginBottom: "3px",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {message.sender === "user" && (
+              <span>
+                <span style={{ color: "#aaa" }}>{"⚙>"}</span> {message.text}
+              </span>
+            )}
+            {message.sender === "bot" && (
+              <span>
+                <span style={{ color: "#aaa" }}>{"⚡:"}</span>{" "}
+                {/* Always display text from the global store */}
+                {message.text}
+                {/* Show cursor only while processing and ID matches */}
+                {message.id === currentBotMessageId.current &&
+                  isBotProcessing && <span className="blinking-cursor"></span>}
+              </span>
+            )}
+            {message.sender === "system" && (
+              <span style={{ color: "#ffcc00" }}>* {message.text} *</span>
+            )}
           </div>
-        )}
-        {isSpeaking && (
-          <div style={{ color: "#aaa", fontStyle: "italic" }}>
-            Bot is speaking...
-          </div>
-        )}
+        ))}
         <div ref={historyEndRef} />
       </div>
       <div
@@ -429,7 +259,13 @@ const ChatConsole: React.FC = () => {
           <input
             ref={inputRef}
             type="text"
-            placeholder=""
+            placeholder={
+              !isConnected
+                ? "Connecting..."
+                : isBotProcessing
+                ? "Bot processing..."
+                : "Type your message..."
+            }
             value={inputValue}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
@@ -447,20 +283,6 @@ const ChatConsole: React.FC = () => {
               cursor: isInputDisabled ? "not-allowed" : "text",
             }}
           />
-          <span
-            className={
-              !isInputDisabled ? "blinking-cursor" : "blinking-cursor-hidden"
-            }
-            style={{
-              position: "absolute",
-              left: `${inputValue.length * 0.6 + 1.5}em`,
-              top: "50%",
-              transform: "translateY(-50%)",
-              pointerEvents: "none",
-              color: "#00FF00",
-              lineHeight: 1,
-            }}
-          ></span>
         </div>
       </div>
     </div>

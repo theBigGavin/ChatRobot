@@ -163,8 +163,12 @@ const CRTScreen: React.FC = () => {
       }}
     >
       <Canvas shadows camera={{ position: [0, 1.5, 5], fov: 60 }}>
-        <ambientLight intensity={0.4} />
-        <directionalLight position={[5, 5, 5]} intensity={0.8} castShadow />
+        {/* Increased ambient light intensity */}
+        <ambientLight intensity={0.7} />
+        {/* Increased directional light intensity and adjusted position slightly */}
+        <directionalLight position={[3, 5, 4]} intensity={1.1} castShadow />
+        {/* Optional: Add a point light from the front-top-left */}
+        <pointLight position={[-2, 3, 3]} intensity={0.5} />
         <mesh
           rotation={[-Math.PI / 2, 0, 0]}
           position={[0, -1, 0]}
@@ -212,8 +216,9 @@ const CRTScreen: React.FC = () => {
   );
 };
 
-// Placeholder component for the right Dashboard area
-const DashboardPlaceholder: React.FC = () => {
+// --- Define DashboardPlaceholder OUTSIDE App component ---
+const DashboardPlaceholder: React.FC = React.memo(() => {
+  // Wrap with React.memo
   // ... (Dashboard code remains the same) ...
   return (
     <div
@@ -267,7 +272,7 @@ const DashboardPlaceholder: React.FC = () => {
           padding: "5px",
         }}
       >
-        <ChatConsole />
+        <ChatConsole key="chat-console" /> {/* Keep stable key */}
       </div>
       <div
         style={{
@@ -282,7 +287,8 @@ const DashboardPlaceholder: React.FC = () => {
       </div>
     </div>
   );
-};
+}); // End of React.memo wrapper
+// --- End DashboardPlaceholder definition ---
 
 function App() {
   const gameState = useAppStore(selectGameState);
@@ -336,7 +342,8 @@ function App() {
             <CRTScreen />
           </div>
           <div style={{ flex: "0 0 60%", height: "100%" }}>
-            <DashboardPlaceholder />
+            <DashboardPlaceholder key="dashboard-placeholder" />{" "}
+            {/* Add stable key */}
           </div>
         </div>
       </div>
