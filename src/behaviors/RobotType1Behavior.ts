@@ -11,8 +11,8 @@ const armPivotLocalOffset = new THREE.Vector3(0, -0.4, 0); // Re-introduce offse
 // 调整曲线点以实现 "举起再落下" 的效果 (数值可能需要微调)
 const fingertipStartLocal = new THREE.Vector3(0, 0, 1);    // 起点: 较低，稍靠前
 const fingertipEndLocal = new THREE.Vector3(0.2, 3, 0.8);  // 终点: 也较低，位置略有变化
-const fingertipControl1Local = new THREE.Vector3(0.6, 5, 0.5); // 控制点1: 很高，稍向右
-const fingertipControl2Local = new THREE.Vector3(-0.9, 4, 0.3);// 控制点2: 也很高，稍向左
+const fingertipControl1Local = new THREE.Vector3(1.5, 20, 0.5); // 控制点1: 很高，稍向右
+const fingertipControl2Local = new THREE.Vector3(-0.9, 10, 0.3);// 控制点2: 也很高，稍向左
 const fingertipPathCurve = new THREE.CubicBezierCurve3(
   fingertipStartLocal,
   fingertipControl1Local,
@@ -20,7 +20,7 @@ const fingertipPathCurve = new THREE.CubicBezierCurve3(
   fingertipEndLocal
 );
 
-const waveAnimationDuration = 3000; // ms
+const waveAnimationDuration = 10000; // ms
 const returnLerpFactor = 0.1;
 // const curveSpeed = 1.5; // No longer used for direct control
 // const waveSpeed = 4; // Speed for direct rotation wave
