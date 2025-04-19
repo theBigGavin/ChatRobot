@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react"; // Import useRef
-import { Canvas, useFrame } from "@react-three/fiber"; // Import useFrame
+import React, { useState, useEffect, useRef } from "react"; // Removed useMemo
+import { Canvas } from "@react-three/fiber"; // Import useFrame removed as it's in controller
 import { OrbitControls } from "@react-three/drei";
 import {
   EffectComposer,
@@ -14,13 +14,22 @@ import StatusMeters from "./components/StatusMeters";
 import ChatConsole from "./components/ChatConsole";
 import PhysicalControls from "./components/PhysicalControls";
 import { useAppStore, selectGameState } from "./store/useAppStore";
+import { RobotType1Behavior } from "./behaviors/RobotType1Behavior"; // Import behavior
+import { IRobotBehavior } from "./types/robot"; // Removed AnimationName import
 
 // CSS for screen shake effect
 const screenShakeStyle = `
 @keyframes screenShake {
   0% { transform: translate(1px, 1px) rotate(0deg); }
   10% { transform: translate(-1px, -2px) rotate(-0.5deg); }
-  /* ... rest of keyframes ... */
+  20% { transform: translate(-3px, 0px) rotate(0.5deg); }
+  30% { transform: translate(3px, 2px) rotate(0deg); }
+  40% { transform: translate(1px, -1px) rotate(0.5deg); }
+  50% { transform: translate(-1px, 2px) rotate(-0.5deg); }
+  60% { transform: translate(-3px, 1px) rotate(0deg); }
+  70% { transform: translate(3px, 1px) rotate(-0.5deg); }
+  80% { transform: translate(-1px, -1px) rotate(0.5deg); }
+  90% { transform: translate(1px, 2px) rotate(0deg); }
   100% { transform: translate(1px, -2px) rotate(-0.5deg); }
 }
 .screen-shake {
@@ -41,13 +50,17 @@ interface EffectParams {
 }
 
 // Internal component to handle effects logic using useFrame
+// Need to import useFrame here if CRTEffectsController is defined in this file
+import { useFrame as useFrameEffects } from "@react-three/fiber"; // Alias if needed
+
 const CRTEffectsController: React.FC<{
   isGenerating: boolean;
   effectsRef: React.MutableRefObject<EffectParams>; // Use defined type
   setEffectParams: React.Dispatch<React.SetStateAction<EffectParams>>; // Use defined type
 }> = ({ isGenerating, effectsRef, setEffectParams }) => {
   // useFrame hook for continuous subtle fluctuations when idle
-  useFrame(({ clock }) => {
+  useFrameEffects(({ clock }) => {
+    // Use the imported useFrame
     if (!isGenerating) {
       const time = clock.getElapsedTime();
       // Subtle sine wave fluctuations for scanline and noise opacity
@@ -80,7 +93,10 @@ const CRTEffectsController: React.FC<{
 };
 
 // Component for the left CRT screen area containing the 3D Canvas
-const CRTScreen: React.FC = () => {
+const CRTScreen: React.FC<{ robotBehavior: IRobotBehavior | null }> = ({
+  robotBehavior,
+}) => {
+  // Accept behavior
   const gameState = useAppStore(selectGameState);
   const isGenerating = gameState === "robot_generating";
 
@@ -148,8 +164,6 @@ const CRTScreen: React.FC = () => {
     };
   }, [isGenerating]);
 
-  // Removed useFrame from here
-
   return (
     <div
       style={{
@@ -178,7 +192,8 @@ const CRTScreen: React.FC = () => {
           <meshStandardMaterial color="#333" />
         </mesh>
         <React.Suspense fallback={null}>
-          <RobotViewer />
+          {/* Conditionally render RobotViewer only when behavior exists */}
+          {robotBehavior && <RobotViewer robotBehavior={robotBehavior} />}
         </React.Suspense>
         <OrbitControls target={[0, 0.5, 0]} />
         {/* Render the controller component inside Canvas */}
@@ -294,6 +309,32 @@ function App() {
   const gameState = useAppStore(selectGameState);
   const setGameState = useAppStore((store) => store.setGameState);
   const [isShaking, setIsShaking] = useState(false);
+  // State to hold the current robot behavior instance
+  const [currentRobotBehavior, setCurrentRobotBehavior] =
+    useState<IRobotBehavior | null>(null);
+  // State to potentially trigger animations (if needed outside behavior)
+  // const [animationToPlay, setAnimationToPlay] = useState<AnimationName | null>(null);
+
+  const handleGenerateRobot = () => {
+    console.log("Generating RobotType1Behavior...");
+    // Dispose of the old behavior if it exists before creating a new one
+    if (currentRobotBehavior) {
+      currentRobotBehavior.dispose();
+    }
+    setCurrentRobotBehavior(new RobotType1Behavior());
+    // setAnimationToPlay(null); // Reset any animation trigger
+  };
+
+  const handlePlayWave = () => {
+    if (currentRobotBehavior) {
+      console.log("Triggering wave animation...");
+      currentRobotBehavior.playAnimation("wave").then(() => {
+        console.log("Wave animation promise resolved (duration ended).");
+      });
+    } else {
+      console.warn("No robot behavior loaded to play wave animation.");
+    }
+  };
 
   useEffect(() => {
     if (gameState === "robot_generating") {
@@ -314,6 +355,19 @@ function App() {
   return (
     <>
       <style>{screenShakeStyle}</style>
+      {/* Add Buttons outside the main flex container */}
+      <div
+        style={{ position: "absolute", top: "10px", left: "10px", zIndex: 10 }}
+      >
+        <button onClick={handleGenerateRobot}>确认生成 / 重置机器人</button>
+        <button
+          onClick={handlePlayWave}
+          disabled={!currentRobotBehavior}
+          style={{ marginLeft: "10px" }}
+        >
+          播放挥手动画
+        </button>
+      </div>
       <div
         style={{
           display: "flex",
@@ -338,10 +392,15 @@ function App() {
             transition: "transform 0.1s ease-out",
           }}
         >
-          <div style={{ flex: "0 0 40%", height: "100%" }}>
-            <CRTScreen />
+          <div style={{ flex: "0 0 65%", height: "100%" }}>
+            {" "}
+            {/* Increased CRT width */}
+            {/* Pass behavior to CRTScreen */}
+            <CRTScreen robotBehavior={currentRobotBehavior} />
           </div>
-          <div style={{ flex: "0 0 60%", height: "100%" }}>
+          <div style={{ flex: "0 0 35%", height: "100%" }}>
+            {" "}
+            {/* Decreased Dashboard width */}
             <DashboardPlaceholder key="dashboard-placeholder" />{" "}
             {/* Add stable key */}
           </div>
