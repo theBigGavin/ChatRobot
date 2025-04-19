@@ -2,31 +2,27 @@
 import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { IRobotBehavior, AnimationName } from '../types/robot';
-import { ArmWaveAnimator } from '../animations/ArmWaveAnimator'; // Import the new animator
+import { ArmWaveAnimator } from '../animations/ArmWaveAnimator'; // 导入挥手动画器
 
-// --- Constants specific to RobotType1 ---
-const shoulderPositionOffset = new THREE.Vector3(0, 0.4, 0);
-const armPivotLocalOffset = new THREE.Vector3(0, -0.4, 0); // Re-introduce offset for direct arm placement
+// --- RobotType1 行为相关的常量 ---
+const shoulderPositionOffset = new THREE.Vector3(0, 0.4, 0); // 肩部枢轴相对于机器人中心的偏移
+const armPivotLocalOffset = new THREE.Vector3(0, -0.4, 0); // 手臂模型相对于肩部枢轴的局部偏移
 
-// Curve definition and duration are now moved to ArmWaveAnimator.ts
+// 注意: 挥手动画的曲线、持续时间等现在由 ArmWaveAnimator 管理
 
-const returnLerpFactor = 0.1;
-// const curveSpeed = 1.5; // No longer used for direct control
-// const waveSpeed = 4; // Speed for direct rotation wave
-// const waveAmplitude = Math.PI / 5; // Base amplitude for direct rotation wave
-const breathSpeed = 2;
-const breathAmplitude = 0.01;
-const entryStartY = 5.0;
-const groundY = 0;
-const fallSpeed = 5.0;
-const squashDuration = 0.1;
-const stretchDuration = 0.2;
-const squashScaleY = 0.8;
-const squashScaleXZ = 1.1;
-// Removed upperArmLength, forearmLength
+const returnLerpFactor = 0.1; // 手臂返回初始姿态的插值系数 (用于 slerp)
+const breathSpeed = 2; // 呼吸动画速度
+const breathAmplitude = 0.01; // 呼吸动画幅度
+const entryStartY = 5.0; // 入场动画起始高度
+const groundY = 0; // 地面 Y 坐标
+const fallSpeed = 5.0; // 入场下落速度
+const squashDuration = 0.1; // 入场挤压动画持续时间 (秒)
+const stretchDuration = 0.2; // 入场伸展动画持续时间 (秒)
+const squashScaleY = 0.8; // 挤压时 Y 轴缩放
+const squashScaleXZ = 1.1; // 挤压时 X/Z 轴缩放
 // ---
 
-// Helper function
+// 辅助函数：为模型及其子对象递归地启用阴影投射和接收
 const applyShadows = (scene: THREE.Group | undefined) => {
   scene?.traverse((child) => {
     if ((child as THREE.Mesh).isMesh) {
@@ -39,60 +35,61 @@ const applyShadows = (scene: THREE.Group | undefined) => {
 
 export class RobotType1Behavior implements IRobotBehavior {
   private gltfLoader = new GLTFLoader();
-  private robotGroup: THREE.Group | null = null;
-  private headGroup: THREE.Group | null = null;
-  private torsoGroup: THREE.Group | null = null;
-  private leftArmGroup: THREE.Group | null = null;
-  private rightArmGroup: THREE.Group | null = null; // Arm model group
-  private rightArmPivot: THREE.Group | null = null; // Shoulder pivot
-  // Removed elbowPivot
-  private leftLegGroup: THREE.Group | null = null;
-  private rightLegGroup: THREE.Group | null = null;
+  private robotGroup: THREE.Group | null = null; // 机器人整体 Group
+  private headGroup: THREE.Group | null = null; // 头部模型组
+  private torsoGroup: THREE.Group | null = null; // 躯干模型组
+  private leftArmGroup: THREE.Group | null = null; // 左臂模型组
+  private rightArmGroup: THREE.Group | null = null; // 右臂模型组
+  private rightArmPivot: THREE.Group | null = null; // 右肩枢轴点 (用于旋转手臂)
+  private leftLegGroup: THREE.Group | null = null; // 左腿模型组
+  private rightLegGroup: THREE.Group | null = null; // 右腿模型组
 
-  private initialShoulderRotation: THREE.Euler | null = null; // Renamed for clarity
-  // Removed initialElbowRotation
-  private currentAnimation: AnimationName | 'returning' | 'entering_falling' | 'entering_squash' | 'entering_stretch' = 'idle';
-  private animationTimer: NodeJS.Timeout | null = null;
-  private entryAnimTimer = 0;
-  private isLoaded = false;
-  // Removed curveVisual variable, now managed by ArmWaveAnimator
-  // Removed waveAnimationStartTime, handled by ArmWaveAnimator
+  private initialShoulderRotation: THREE.Euler | null = null; // 肩部初始旋转 (Euler角度), 用于返回静止状态
+  private currentAnimation: AnimationName | 'returning' | 'entering_falling' | 'entering_squash' | 'entering_stretch' = 'idle'; // 当前动画状态
+  private entryAnimTimer = 0; // 入场动画内部计时器
+  private isLoaded = false; // 模型是否加载完成标志
 
-  // --- Animators ---
-  private armWaveAnimator = new ArmWaveAnimator();
+  // --- 动画器实例 ---
+  private armWaveAnimator = new ArmWaveAnimator(); // 挥手动画器实例
   // ---
 
-  // Removed temp vectors used for IK
-
+  // 加载单个 GLTF 模型文件
   private async loadModel(url: string): Promise<GLTF> {
     return new Promise((resolve, reject) => {
       this.gltfLoader.load(url, resolve, undefined, reject);
     });
   }
 
+  /** 初始化并加载机器人模型和资源 */
   async load(parentGroup: THREE.Group): Promise<void> {
     if (this.isLoaded) return;
 
     try {
+      // 并行加载所有模型部件
       const [
         headGltf, torsoGltf, leftArmGltf, rightArmGltf, leftLegGltf, rightLegGltf,
       ] = await Promise.all([
         this.loadModel("/assets/models/robot1/head0.gltf"),
         this.loadModel("/assets/models/robot1/torso.gltf"),
         this.loadModel("/assets/models/robot1/left_arm.gltf"),
-        this.loadModel("/assets/models/robot1/right_arm.gltf"), // This is the whole arm again
-        this.loadModel("/assets/models/robot1/left_leg.gltf"),
-        this.loadModel("/assets/models/robot1/right_leg.gltf"),
+        this.loadModel("/assets/models/robot1/right_arm.gltf"), // 右臂
+        this.loadModel("/assets/models/robot1/left_leg.gltf"),  // 左腿
+        this.loadModel("/assets/models/robot1/right_leg.gltf"), // 右腿
       ]);
 
+      // 创建机器人根 Group
       this.robotGroup = new THREE.Group();
+      this.robotGroup.name = "RobotType1";
+
+      // 获取各部件的场景根节点
       this.headGroup = headGltf.scene;
       this.torsoGroup = torsoGltf.scene;
       this.leftArmGroup = leftArmGltf.scene;
-      this.rightArmGroup = rightArmGltf.scene; // Whole arm model
+      this.rightArmGroup = rightArmGltf.scene;
       this.leftLegGroup = leftLegGltf.scene;
       this.rightLegGroup = rightLegGltf.scene;
 
+      // 为所有部件启用阴影
       applyShadows(this.headGroup);
       applyShadows(this.torsoGroup);
       applyShadows(this.leftArmGroup);
@@ -100,209 +97,242 @@ export class RobotType1Behavior implements IRobotBehavior {
       applyShadows(this.leftLegGroup);
       applyShadows(this.rightLegGroup);
 
-      const headPos = new THREE.Vector3(0, 0, 0);
-      const torsoPos = new THREE.Vector3(0, 0, 0);
-      const leftArmPos = new THREE.Vector3(0, 0, 0);
-      const leftLegPos = new THREE.Vector3(0, 0, 0);
-      const rightLegPos = new THREE.Vector3(0, 0, 0);
-
-      this.headGroup.position.copy(headPos);
-      this.torsoGroup.position.copy(torsoPos);
-      this.leftArmGroup.position.copy(leftArmPos);
-      this.leftLegGroup.position.copy(leftLegPos);
-      this.rightLegGroup.position.copy(rightLegPos);
-
-      // Create and position the shoulder pivot
+      // 创建并定位右肩的枢轴点 (一个空的 Group)
       this.rightArmPivot = new THREE.Group();
-      this.rightArmPivot.name = "ShoulderPivot";
-      this.rightArmPivot.position.copy(shoulderPositionOffset);
+      this.rightArmPivot.name = "RightShoulderPivot"; // 命名以便调试
+      this.rightArmPivot.position.copy(shoulderPositionOffset); // 设置枢轴在机器人坐标系中的位置
 
-      // Position the arm model directly relative to the shoulder pivot, using offset
+      // 将右臂模型添加到枢轴点，并设置其相对于枢轴的局部偏移
+      // 这样旋转枢轴点就会带动整个手臂旋转
       this.rightArmGroup.position.copy(armPivotLocalOffset);
-      this.rightArmPivot.add(this.rightArmGroup); // Add arm directly to shoulder pivot
+      this.rightArmPivot.add(this.rightArmGroup);
 
-      // Get the curve visual object from the animator and add it to the scene
+      // 从挥手动画器获取曲线可视化对象 (如果需要调试)
       const curveVisualObject = this.armWaveAnimator.getCurveVisualObject();
       if (curveVisualObject && this.robotGroup) {
-        // Position the visualization at the shoulder offset relative to the robot group
+        // 将可视化曲线的位置设置为与肩部枢轴相同 (因为曲线坐标是相对于枢轴的)
         curveVisualObject.position.copy(shoulderPositionOffset);
-        this.robotGroup.add(curveVisualObject);
-        // Optionally set default visibility (default is false in animator)
-        // this.armWaveAnimator.setShowCurveVisual(true);
+        this.robotGroup.add(curveVisualObject); // 添加到机器人主 Group 中
+        // 可选：在这里设置曲线默认可见
+        // this.setShowWaveCurve(true);
       }
 
-      // Add all parts to the main robot group
+      // 将所有身体部件和右臂枢轴添加到机器人主 Group
       this.robotGroup.add(this.headGroup);
       this.robotGroup.add(this.torsoGroup);
       this.robotGroup.add(this.leftArmGroup);
-      this.robotGroup.add(this.rightArmPivot);
+      this.robotGroup.add(this.rightArmPivot); // 添加的是枢轴，手臂已作为其子对象
       this.robotGroup.add(this.leftLegGroup);
       this.robotGroup.add(this.rightLegGroup);
 
-      // Capture initial rotation
+      // 记录右肩枢轴的初始旋转姿态 (用于返回 idle 状态)
       this.initialShoulderRotation = this.rightArmPivot.rotation.clone();
-      // Removed elbow rotation capture
 
-      // Start entry animation
+      // 开始播放入场动画
       this.robotGroup.position.y = entryStartY;
       this.currentAnimation = 'entering_falling';
 
+      // 将机器人添加到父 Group 中
       parentGroup.add(this.robotGroup);
       this.isLoaded = true;
+      console.log("机器人行为：RobotType1 加载完成。");
 
     } catch (error) {
-      console.error("Failed to load robot assets:", error);
+      console.error("机器人行为：加载机器人资源失败:", error);
     }
   }
 
+  /** 获取机器人对象的根 Group */
   getObject(): THREE.Object3D | null {
     return this.robotGroup;
   }
 
-  // Removed duration parameter as it's now handled internally by ArmWaveAnimator
+  /**
+   * 播放指定名称的动画。
+   * @param name 动画名称 ('idle', 'wave', 'breathe', 'entering')
+   * @returns 一个在动画逻辑启动后立即解析的 Promise。
+   */
   playAnimation(name: AnimationName): Promise<void> {
     return new Promise((resolve) => {
-      if (!this.isLoaded || !this.rightArmPivot || !this.initialShoulderRotation) { // Removed elbow checks
-        console.warn("Robot/Arm not fully loaded or initial state not set, cannot play animation:", name);
+      // 前置检查
+      if (!this.isLoaded || !this.rightArmPivot || !this.initialShoulderRotation) {
+        console.warn("机器人行为：模型未加载或手臂未初始化，无法播放动画:", name);
         resolve();
         return;
       }
-      if (this.animationTimer) clearTimeout(this.animationTimer);
-      this.currentAnimation = name;
 
-      if (name === 'wave') {
-        // Activate the animator, optionally pass a duration if needed:
-        // this.armWaveAnimator.activate(duration); // Example if duration param was kept
-        // this.armWaveAnimator.setShowCurveVisual(true)
-        this.armWaveAnimator.activate(); // Using default duration defined in animator
-        // No need for setTimeout here anymore, animator handles its own lifecycle
-        resolve(); // Resolve immediately, animation runs in background via update loop
-      } else if (name === 'idle') {
-        this.currentAnimation = 'returning';
-        resolve();
-      } else if (name === 'breathe' || name === 'entering') {
-        resolve(); // These are handled internally or always active
-      } else {
-        console.warn("Unknown animation name:", name);
-        resolve();
+      this.currentAnimation = name; // 更新当前动画状态
+
+      switch (name) {
+        case 'wave':
+          // 激活挥手动画器，它将通过 update 循环驱动动画
+          // 可以选择传递持续时间 (毫秒) 给 activate 方法，例如: this.armWaveAnimator.activate(5000);
+          // 也可以在这里控制曲线显示: this.setShowWaveCurve(true);
+          this.armWaveAnimator.activate(); // 使用动画器内部定义的默认持续时间
+          break;
+        case 'idle':
+          // 请求 idle 状态时，先切换到 returning 让手臂平滑归位
+          this.currentAnimation = 'returning';
+          break;
+        case 'breathe': // 呼吸动画在 update 中自动处理
+        case 'entering': // 入场动画在 load 后自动开始，并在 update 中处理
+          // 这两种状态不需要额外操作
+          break;
+        default:
+          console.warn("机器人行为：未知的动画名称:", name);
+          break;
       }
+      resolve(); // 动画逻辑已启动或状态已设置，立即返回
     });
   }
 
   /**
-   * Controls the visibility of the arm wave animation curve visual.
-   * @param show True to show the curve, false to hide it.
+   * 控制挥手动画曲线可视化的可见性。
+   * @param show true 显示曲线, false 隐藏曲线。
    */
   public setShowWaveCurve(show: boolean): void {
     this.armWaveAnimator.setShowCurveVisual(show);
   }
 
+  /** 将机器人立即设置为静止（idle）姿态 */
   setToRestPose(): void {
-    if (this.rightArmPivot && this.initialShoulderRotation && this.robotGroup) { // Removed elbow checks
+    if (this.rightArmPivot && this.initialShoulderRotation && this.robotGroup) {
+      // 恢复手臂初始旋转
       this.rightArmPivot.rotation.copy(this.initialShoulderRotation);
-      // Removed elbow reset
+      // 恢复机器人位置和缩放
       this.robotGroup.position.y = groundY;
       this.robotGroup.scale.set(1, 1, 1);
+      // 设置状态
       this.currentAnimation = 'idle';
+      // 确保挥手动画器停止
+      this.armWaveAnimator.deactivate();
     }
-    if (this.animationTimer) clearTimeout(this.animationTimer);
   }
 
 
+  /** 每帧更新逻辑 */
   update(deltaTime: number, elapsedTime: number): void {
-    if (!this.isLoaded || !this.robotGroup) return;
+    if (!this.isLoaded || !this.robotGroup) return; // 安全检查
 
-    // --- Entry Animation ---
-    if (this.currentAnimation === 'entering_falling') {
-      this.robotGroup.position.y -= fallSpeed * deltaTime;
-      if (this.robotGroup.position.y <= groundY) {
-        this.robotGroup.position.y = groundY;
-        this.currentAnimation = 'entering_squash';
-        this.entryAnimTimer = 0;
-        if (this.rightArmPivot && this.initialShoulderRotation) { // Removed elbow checks
-          this.rightArmPivot.rotation.copy(this.initialShoulderRotation);
-          // Removed elbow reset
-        }
-      }
-    } else if (this.currentAnimation === 'entering_squash') {
-      this.entryAnimTimer += deltaTime;
-      const progress = Math.min(this.entryAnimTimer / squashDuration, 1);
-      this.robotGroup.scale.y = THREE.MathUtils.lerp(1, squashScaleY, progress);
-      this.robotGroup.scale.x = THREE.MathUtils.lerp(1, squashScaleXZ, progress);
-      this.robotGroup.scale.z = THREE.MathUtils.lerp(1, squashScaleXZ, progress);
-      this.robotGroup.position.y = groundY + (this.robotGroup.scale.y - 1) * -0.5;
-      if (progress >= 1) {
-        this.currentAnimation = 'entering_stretch';
-        this.entryAnimTimer = 0;
-      }
-    } else if (this.currentAnimation === 'entering_stretch') {
-      this.entryAnimTimer += deltaTime;
-      const progress = Math.min(this.entryAnimTimer / stretchDuration, 1);
-      this.robotGroup.scale.y = THREE.MathUtils.lerp(squashScaleY, 1, progress);
-      this.robotGroup.scale.x = THREE.MathUtils.lerp(squashScaleXZ, 1, progress);
-      this.robotGroup.scale.z = THREE.MathUtils.lerp(squashScaleXZ, 1, progress);
-      this.robotGroup.position.y = groundY + (this.robotGroup.scale.y - 1) * -0.5;
-      if (progress >= 1) {
-        this.currentAnimation = 'idle';
-        this.robotGroup.scale.set(1, 1, 1);
-        const idleScaleY = 1 + Math.sin(elapsedTime * breathSpeed) * breathAmplitude;
-        this.robotGroup.position.y = (idleScaleY - 1) * -0.5;
-      }
+    // --- 处理入场动画状态 ---
+    if (this.currentAnimation.startsWith('entering')) {
+      this.updateEntryAnimation(deltaTime, elapsedTime);
     } else {
-      // --- Breathing Animation (Only when idle/returning/wave) ---
-      const scaleFactor = 1 + Math.sin(elapsedTime * breathSpeed) * breathAmplitude;
-      this.robotGroup.scale.y = scaleFactor;
-      this.robotGroup.position.y = (scaleFactor - 1) * -0.5;
+      // --- 处理非入场动画状态 (idle, wave, returning) ---
 
-      // --- Arm Animation ---
-      if (this.rightArmPivot && this.initialShoulderRotation && !this.currentAnimation.startsWith('entering')) { // Removed elbow check
-        if (this.currentAnimation === 'wave') {
-          // Delegate wave animation update to the animator
-          this.armWaveAnimator.update(elapsedTime, this.rightArmPivot);
+      // 应用呼吸效果
+      this.applyBreathingEffect(elapsedTime);
 
-          // Check if the animator deactivated itself (duration ended)
-          if (!this.armWaveAnimator.isActive && this.currentAnimation === 'wave') { // Add check for currentAnimation
-            this.currentAnimation = 'returning'; // Switch back to returning state
-            console.log("Wave animation finished, switching to returning state.");
-          }
+      // 处理手臂动画
+      this.updateArmAnimation(elapsedTime);
+    }
+  }
 
-        } else { // returning or idle
-          // Ensure animator is deactivated when not waving (e.g., if switched directly to idle)
-          this.armWaveAnimator.deactivate();
-          // Return to Rest or stay Idle
-          if (!this.rightArmPivot.rotation.equals(this.initialShoulderRotation)) {
-            this.rightArmPivot.rotation.x = THREE.MathUtils.lerp(this.rightArmPivot.rotation.x, this.initialShoulderRotation.x, returnLerpFactor);
-            this.rightArmPivot.rotation.y = THREE.MathUtils.lerp(this.rightArmPivot.rotation.y, this.initialShoulderRotation.y, returnLerpFactor);
-            this.rightArmPivot.rotation.z = THREE.MathUtils.lerp(this.rightArmPivot.rotation.z, this.initialShoulderRotation.z, returnLerpFactor);
+  /** 更新入场动画状态机 */
+  private updateEntryAnimation(deltaTime: number, elapsedTime: number): void {
+    if (!this.robotGroup) return;
 
-            this.currentAnimation = 'returning';
-            const epsilon = 0.01;
-            if (
-              Math.abs(this.rightArmPivot.rotation.x - this.initialShoulderRotation.x) < epsilon &&
-              Math.abs(this.rightArmPivot.rotation.y - this.initialShoulderRotation.y) < epsilon &&
-              Math.abs(this.rightArmPivot.rotation.z - this.initialShoulderRotation.z) < epsilon
-              // Removed elbow check
-            ) {
-              this.rightArmPivot.rotation.copy(this.initialShoulderRotation);
-              // Removed elbow copy
-              this.currentAnimation = 'idle';
-            }
-          } else {
-            this.currentAnimation = 'idle';
+    switch (this.currentAnimation) {
+      case 'entering_falling': // 下落阶段
+        this.robotGroup.position.y -= fallSpeed * deltaTime;
+        if (this.robotGroup.position.y <= groundY) { // 触地
+          this.robotGroup.position.y = groundY;
+          this.currentAnimation = 'entering_squash'; // 进入挤压阶段
+          this.entryAnimTimer = 0;
+          // 触地时重置手臂姿态
+          if (this.rightArmPivot && this.initialShoulderRotation) {
+            this.rightArmPivot.rotation.copy(this.initialShoulderRotation);
           }
         }
+        break;
+      case 'entering_squash': { // 挤压阶段 (添加花括号创建作用域)
+        this.entryAnimTimer += deltaTime;
+        const squashProgress = Math.min(this.entryAnimTimer / squashDuration, 1);
+        this.robotGroup.scale.y = THREE.MathUtils.lerp(1, squashScaleY, squashProgress);
+        this.robotGroup.scale.x = THREE.MathUtils.lerp(1, squashScaleXZ, squashProgress);
+        this.robotGroup.scale.z = THREE.MathUtils.lerp(1, squashScaleXZ, squashProgress);
+        this.robotGroup.position.y = groundY + (this.robotGroup.scale.y - 1) * -0.5; // 保持底部贴地
+        if (squashProgress >= 1) { // 挤压完成
+          this.currentAnimation = 'entering_stretch'; // 进入伸展阶段
+          this.entryAnimTimer = 0;
+        }
+        break;
+      } // 结束 entering_squash 作用域
+      case 'entering_stretch': { // 伸展恢复阶段 (添加花括号创建作用域)
+        this.entryAnimTimer += deltaTime;
+        const stretchProgress = Math.min(this.entryAnimTimer / stretchDuration, 1);
+        this.robotGroup.scale.y = THREE.MathUtils.lerp(squashScaleY, 1, stretchProgress);
+        this.robotGroup.scale.x = THREE.MathUtils.lerp(squashScaleXZ, 1, stretchProgress);
+        this.robotGroup.scale.z = THREE.MathUtils.lerp(squashScaleXZ, 1, stretchProgress);
+        this.robotGroup.position.y = groundY + (this.robotGroup.scale.y - 1) * -0.5; // 保持底部贴地
+        if (stretchProgress >= 1) { // 伸展完成
+          this.currentAnimation = 'idle'; // 入场动画结束，进入 idle
+          this.robotGroup.scale.set(1, 1, 1); // 确保缩放完全恢复
+          // 计算 idle 状态下的呼吸效果初始位置
+          const idleScaleY = 1 + Math.sin(elapsedTime * breathSpeed) * breathAmplitude;
+          this.robotGroup.position.y = (idleScaleY - 1) * -0.5;
+        }
+        break;
+      } // 结束 entering_stretch 作用域
+    }
+  }
+
+  /** 应用呼吸效果 */
+  private applyBreathingEffect(elapsedTime: number): void {
+    if (!this.robotGroup) return;
+    const scaleFactor = 1 + Math.sin(elapsedTime * breathSpeed) * breathAmplitude;
+    this.robotGroup.scale.y = scaleFactor;
+    this.robotGroup.position.y = (scaleFactor - 1) * -0.5; // 调整 Y 坐标保持底部贴地
+  }
+
+  /** 更新手臂动画状态 (wave 或 returning/idle) */
+  private updateArmAnimation(elapsedTime: number): void {
+    if (!this.rightArmPivot || !this.initialShoulderRotation) return;
+
+    if (this.currentAnimation === 'wave') {
+      // 委托给挥手动画器
+      this.armWaveAnimator.update(elapsedTime, this.rightArmPivot);
+      // 检查动画器是否已完成
+      if (!this.armWaveAnimator.isActive) {
+        this.currentAnimation = 'returning'; // 切换到返回状态
+        console.log("机器人行为：挥手动画结束，切换到返回状态。");
+      }
+    } else { // returning 或 idle 状态
+      // 确保挥手动画器已停用
+      this.armWaveAnimator.deactivate();
+
+      // 处理手臂返回或保持 idle 状态
+      if (!this.rightArmPivot.rotation.equals(this.initialShoulderRotation)) {
+        // 使用 slerp 平滑插值回到初始旋转 (比分别 lerp Euler 角度更优)
+        const targetQuaternion = new THREE.Quaternion().setFromEuler(this.initialShoulderRotation);
+        this.rightArmPivot.quaternion.slerp(targetQuaternion, returnLerpFactor);
+
+        // 检查是否足够接近初始旋转 (使用四元数角度判断)
+        const angleToInitial = this.rightArmPivot.quaternion.angleTo(targetQuaternion);
+        const epsilon = 0.01; // 角度阈值 (弧度)
+
+        if (angleToInitial < epsilon) {
+          // 完全恢复到初始旋转并切换到 idle 状态
+          this.rightArmPivot.rotation.copy(this.initialShoulderRotation); // 直接复制 Euler 保证精确
+          this.currentAnimation = 'idle';
+        } else {
+          // 否则保持 returning 状态
+          this.currentAnimation = 'returning';
+        }
+      } else {
+        // 如果已经在初始位置，则确保状态是 idle
+        this.currentAnimation = 'idle';
       }
     }
   }
 
 
+  /** 清理资源 */
   dispose(): void {
-    // Call the animator's dispose method to clean up its resources (like the curve visual)
+    // 清理挥手动画器的资源 (例如曲线可视化对象)
     this.armWaveAnimator.dispose();
 
-    // The robotGroup traversal below will handle removing the curve visual from the scene graph if it was added
-    // No need to manually remove it here anymore.
-
+    // 遍历并释放机器人组内所有网格的几何体和材质资源
     this.robotGroup?.traverse(child => {
       if (child instanceof THREE.Mesh) {
         child.geometry?.dispose();
@@ -314,11 +344,11 @@ export class RobotType1Behavior implements IRobotBehavior {
         }
       }
     });
+    // 从父级移除机器人组
     this.robotGroup?.parent?.remove(this.robotGroup);
-    if (this.animationTimer) clearTimeout(this.animationTimer);
+    // animationTimer 已移除，无需清理
     this.isLoaded = false;
-    console.log("RobotType1Behavior disposed");
+    console.log("机器人行为：RobotType1Behavior 已清理。");
   }
 
-  // Removed _solveIK method
 }
