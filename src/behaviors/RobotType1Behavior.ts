@@ -8,12 +8,11 @@ const shoulderPositionOffset = new THREE.Vector3(0, 0.4, 0);
 const armPivotLocalOffset = new THREE.Vector3(0, -0.4, 0); // Re-introduce offset for direct arm placement
 
 // Define the curve for visual reference (optional)
-const fixedX = 0;
-const fixedZ = 0;
-const fingertipStartLocal = new THREE.Vector3(fixedX, 10, fixedZ);
-const fingertipEndLocal = new THREE.Vector3(fixedX, 0.2, fixedZ);
-const fingertipControl1Local = new THREE.Vector3(fixedX, -1, fixedZ);
-const fingertipControl2Local = new THREE.Vector3(fixedX, -2, fixedZ);
+// 调整曲线点以实现 "举起再落下" 的效果 (数值可能需要微调)
+const fingertipStartLocal = new THREE.Vector3(0, 0, 1);    // 起点: 较低，稍靠前
+const fingertipEndLocal = new THREE.Vector3(0.2, 3, 0.8);  // 终点: 也较低，位置略有变化
+const fingertipControl1Local = new THREE.Vector3(0.6, 5, 0.5); // 控制点1: 很高，稍向右
+const fingertipControl2Local = new THREE.Vector3(-0.9, 4, 0.3);// 控制点2: 也很高，稍向左
 const fingertipPathCurve = new THREE.CubicBezierCurve3(
   fingertipStartLocal,
   fingertipControl1Local,
@@ -68,6 +67,7 @@ export class RobotType1Behavior implements IRobotBehavior {
   private entryAnimTimer = 0;
   private isLoaded = false;
   private curveVisual: THREE.Line | null = null; // Keep for debugging reference
+  private waveAnimationStartTime: number | null = null; // Track wave start time
 
   // Removed temp vectors used for IK
 
@@ -176,8 +176,12 @@ export class RobotType1Behavior implements IRobotBehavior {
       this.currentAnimation = name;
 
       if (name === 'wave') {
+        this.waveAnimationStartTime = null; // Reset start time, will be captured in update
         this.animationTimer = setTimeout(() => {
-          if (this.currentAnimation === 'wave') this.currentAnimation = 'returning';
+          if (this.currentAnimation === 'wave') {
+            this.currentAnimation = 'returning';
+            this.waveAnimationStartTime = null; // Clear start time when wave ends
+          }
           this.animationTimer = null;
           resolve();
         }, duration);
@@ -253,13 +257,19 @@ export class RobotType1Behavior implements IRobotBehavior {
       // --- Arm Animation ---
       if (this.rightArmPivot && this.initialShoulderRotation && !this.currentAnimation.startsWith('entering')) { // Removed elbow check
         if (this.currentAnimation === 'wave') {
-          // --- Direct Rotation Wave ---
-          const t = elapsedTime; // Use elapsedTime for consistency
+          // --- Direct Rotation Wave with Relative Time ---
+          // Capture start time on the first frame
+          if (this.waveAnimationStartTime === null) {
+            this.waveAnimationStartTime = elapsedTime;
+          }
+          // Calculate elapsed time relative to the start of this specific wave animation
+          const waveElapsedTime = elapsedTime - this.waveAnimationStartTime;
+
           // Apply sinusoidal rotation on X, Y, Z axes relative to initial rotation
           // this.rightArmPivot.rotation.x = this.initialShoulderRotation.x + Math.sin(t * waveSpeed) * (waveAmplitude * 0.2);
           // this.rightArmPivot.rotation.y = this.initialShoulderRotation.y + Math.sin(t * waveSpeed * 0.5) * (waveAmplitude * 1.0);
           // this.rightArmPivot.rotation.z = this.initialShoulderRotation.z + Math.sin(t * waveSpeed * 0.7) * (waveAmplitude * 0.4);
-          const p = (Math.sin(t * 0.5) + 1) / 2;
+          const p = (Math.sin(waveElapsedTime * 0.5) + 1) / 2; // Use relative time
           const targetPoint = fingertipPathCurve.getPoint(p);
           this.rightArmPivot.lookAt(targetPoint);
 
