@@ -45,10 +45,12 @@ const RobotViewer: React.FC<RobotViewerProps> = ({ robotBehavior }) => {
   }, [robotBehavior]); // Re-run if the behavior instance changes
 
   // --- Update Robot Behavior ---
-  useFrame((state) => {
-    // Delegate all per-frame updates to the behavior instance
-    robotBehavior?.update(state.clock.getDelta(), state.clock.getElapsedTime());
-    // Removed initial rotation capture logic
+  useFrame((state, delta) => {
+    // R3F v8+ 直接提供 delta 参数
+    // 如果使用旧版 R3F，则取消下一行注释:
+    // const delta = state.clock.getDelta();
+    // Delegate all per-frame updates to the behavior instance using the consistent delta
+    robotBehavior?.update(delta, state.clock.getElapsedTime());
   });
 
   // The RobotViewer now only renders a single group.

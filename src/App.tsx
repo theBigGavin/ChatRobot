@@ -336,6 +336,17 @@ function App() {
     }
   };
 
+  const handlePlayJump = () => {
+    if (currentRobotBehavior) {
+      console.log("Triggering jump animation...");
+      currentRobotBehavior.playAnimation("jump").then(() => {
+        console.log("Jump animation triggered (promise resolved immediately).");
+      });
+    } else {
+      console.warn("No robot behavior loaded to play jump animation.");
+    }
+  };
+
   useEffect(() => {
     if (gameState === "robot_generating") {
       setIsShaking(true);
@@ -366,6 +377,14 @@ function App() {
           style={{ marginLeft: "10px" }}
         >
           播放挥手动画
+        </button>
+        {/* 添加跳跃按钮 */}
+        <button
+          onClick={handlePlayJump}
+          disabled={!currentRobotBehavior}
+          style={{ marginLeft: "10px" }}
+        >
+          播放跳跃动画
         </button>
       </div>
       <div

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { IRobotBehavior, AnimationName } from '../types/robot';
 import { ArmWaveAnimator } from '../animations/ArmWaveAnimator'; // 导入挥手动画器
+import { JumpAnimator } from '../animations/JumpAnimator'; // 导入跳跃动画器
 
 // --- RobotType1 行为相关的常量 ---
 const shoulderPositionOffset = new THREE.Vector3(0, 0.4, 0); // 肩部枢轴相对于机器人中心的偏移
@@ -51,6 +52,7 @@ export class RobotType1Behavior implements IRobotBehavior {
 
   // --- 动画器实例 ---
   private armWaveAnimator = new ArmWaveAnimator(); // 挥手动画器实例
+  private jumpAnimator = new JumpAnimator();     // 跳跃动画器实例
   // ---
 
   // 加载单个 GLTF 模型文件
@@ -163,15 +165,21 @@ export class RobotType1Behavior implements IRobotBehavior {
 
       this.currentAnimation = name; // 更新当前动画状态
 
+      // 根据请求的动画，激活对应的动画器，并停止其他可能冲突的动画器
       switch (name) {
         case 'wave':
-          // 激活挥手动画器，它将通过 update 循环驱动动画
-          // 可以选择传递持续时间 (毫秒) 给 activate 方法，例如: this.armWaveAnimator.activate(5000);
-          // 也可以在这里控制曲线显示: this.setShowWaveCurve(true);
-          this.armWaveAnimator.activate(); // 使用动画器内部定义的默认持续时间
+          this.jumpAnimator.deactivate(); // 开始挥手前确保跳跃停止
+          this.armWaveAnimator.activate();
+          break;
+        case 'jump':
+          this.armWaveAnimator.deactivate(); // 开始跳跃前确保挥手停止
+          this.jumpAnimator.activate();
           break;
         case 'idle':
-          // 请求 idle 状态时，先切换到 returning 让手臂平滑归位
+          // 请求 idle 状态时，切换到 returning 让手臂平滑归位
+          // 同时确保其他独立动画器停止
+          this.jumpAnimator.deactivate();
+          this.armWaveAnimator.deactivate(); // 虽然 returning 会处理，但显式停止更安全
           this.currentAnimation = 'returning';
           break;
         case 'breathe': // 呼吸动画在 update 中自动处理
@@ -204,8 +212,9 @@ export class RobotType1Behavior implements IRobotBehavior {
       this.robotGroup.scale.set(1, 1, 1);
       // 设置状态
       this.currentAnimation = 'idle';
-      // 确保挥手动画器停止
+      // 确保所有独立动画器停止
       this.armWaveAnimator.deactivate();
+      this.jumpAnimator.deactivate();
     }
   }
 
@@ -214,17 +223,19 @@ export class RobotType1Behavior implements IRobotBehavior {
   update(deltaTime: number, elapsedTime: number): void {
     if (!this.isLoaded || !this.robotGroup) return; // 安全检查
 
-    // --- 处理入场动画状态 ---
+    // --- 根据当前动画状态分发更新逻辑 ---
     if (this.currentAnimation.startsWith('entering')) {
       this.updateEntryAnimation(deltaTime, elapsedTime);
+    } else if (this.currentAnimation === 'jump') {
+      // 跳跃状态：只更新跳跃动画
+      this.updateJumpAnimation(deltaTime, elapsedTime);
+      // 注意：跳跃时暂停呼吸和手臂动画
     } else {
-      // --- 处理非入场动画状态 (idle, wave, returning) ---
-
-      // 应用呼吸效果
+      // 其他状态 (idle, wave, returning)：应用呼吸和手臂动画
       this.applyBreathingEffect(elapsedTime);
-
-      // 处理手臂动画
       this.updateArmAnimation(elapsedTime);
+      // 确保跳跃动画器在这些状态下是停用的 (虽然 playAnimation 和 setToRestPose 应该处理了，但多一层保险)
+      this.jumpAnimator.deactivate();
     }
   }
 
@@ -326,11 +337,27 @@ export class RobotType1Behavior implements IRobotBehavior {
     }
   }
 
+  /** 更新跳跃动画状态 */
+  private updateJumpAnimation(deltaTime: number, elapsedTime: number): void {
+    if (!this.jumpAnimator.isActive) return; // 如果跳跃动画器未激活，则不处理
+
+    this.jumpAnimator.update(deltaTime, elapsedTime, this.robotGroup);
+
+    // 检查跳跃动画器是否已完成
+    if (!this.jumpAnimator.isActive && this.currentAnimation === 'jump') {
+      this.currentAnimation = 'idle'; // 跳跃结束后返回 idle
+      console.log("机器人行为：跳跃动画结束，切换到 idle 状态。");
+      // 可能需要确保手臂回到 idle 状态？setToRestPose 会处理
+      this.setToRestPose(); // 跳跃后恢复静止姿态
+    }
+  }
+
 
   /** 清理资源 */
   dispose(): void {
-    // 清理挥手动画器的资源 (例如曲线可视化对象)
+    // 清理动画器的资源
     this.armWaveAnimator.dispose();
+    this.jumpAnimator.dispose(); // 虽然目前为空，但保持一致性
 
     // 遍历并释放机器人组内所有网格的几何体和材质资源
     this.robotGroup?.traverse(child => {
