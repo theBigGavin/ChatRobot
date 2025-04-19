@@ -2,25 +2,14 @@
 import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { IRobotBehavior, AnimationName } from '../types/robot';
+import { ArmWaveAnimator } from '../animations/ArmWaveAnimator'; // Import the new animator
 
 // --- Constants specific to RobotType1 ---
 const shoulderPositionOffset = new THREE.Vector3(0, 0.4, 0);
 const armPivotLocalOffset = new THREE.Vector3(0, -0.4, 0); // Re-introduce offset for direct arm placement
 
-// Define the curve for visual reference (optional)
-// 调整曲线点以实现 "举起再落下" 的效果 (数值可能需要微调)
-const fingertipStartLocal = new THREE.Vector3(0, 0, 1);    // 起点: 较低，稍靠前
-const fingertipEndLocal = new THREE.Vector3(0.2, 3, 0.8);  // 终点: 也较低，位置略有变化
-const fingertipControl1Local = new THREE.Vector3(1.5, 20, 0.5); // 控制点1: 很高，稍向右
-const fingertipControl2Local = new THREE.Vector3(-0.9, 10, 0.3);// 控制点2: 也很高，稍向左
-const fingertipPathCurve = new THREE.CubicBezierCurve3(
-  fingertipStartLocal,
-  fingertipControl1Local,
-  fingertipControl2Local,
-  fingertipEndLocal
-);
+// Curve definition and duration are now moved to ArmWaveAnimator.ts
 
-const waveAnimationDuration = 10000; // ms
 const returnLerpFactor = 0.1;
 // const curveSpeed = 1.5; // No longer used for direct control
 // const waveSpeed = 4; // Speed for direct rotation wave
@@ -66,8 +55,12 @@ export class RobotType1Behavior implements IRobotBehavior {
   private animationTimer: NodeJS.Timeout | null = null;
   private entryAnimTimer = 0;
   private isLoaded = false;
-  private curveVisual: THREE.Line | null = null; // Keep for debugging reference
-  private waveAnimationStartTime: number | null = null; // Track wave start time
+  // Removed curveVisual variable, now managed by ArmWaveAnimator
+  // Removed waveAnimationStartTime, handled by ArmWaveAnimator
+
+  // --- Animators ---
+  private armWaveAnimator = new ArmWaveAnimator();
+  // ---
 
   // Removed temp vectors used for IK
 
@@ -128,14 +121,15 @@ export class RobotType1Behavior implements IRobotBehavior {
       this.rightArmGroup.position.copy(armPivotLocalOffset);
       this.rightArmPivot.add(this.rightArmGroup); // Add arm directly to shoulder pivot
 
-      // Create curve visualization using local points relative to shoulder
-      const curvePoints = fingertipPathCurve.getPoints(50);
-      const curveGeometry = new THREE.BufferGeometry().setFromPoints(curvePoints);
-      const curveMaterial = new THREE.LineBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 1 }); // Magenta
-      this.curveVisual = new THREE.Line(curveGeometry, curveMaterial);
-      // Position the visualization at the shoulder offset relative to the robot group
-      this.curveVisual.position.copy(shoulderPositionOffset);
-      this.robotGroup.add(this.curveVisual); // Add visual to the main robot group
+      // Get the curve visual object from the animator and add it to the scene
+      const curveVisualObject = this.armWaveAnimator.getCurveVisualObject();
+      if (curveVisualObject && this.robotGroup) {
+        // Position the visualization at the shoulder offset relative to the robot group
+        curveVisualObject.position.copy(shoulderPositionOffset);
+        this.robotGroup.add(curveVisualObject);
+        // Optionally set default visibility (default is false in animator)
+        // this.armWaveAnimator.setShowCurveVisual(true);
+      }
 
       // Add all parts to the main robot group
       this.robotGroup.add(this.headGroup);
@@ -165,7 +159,8 @@ export class RobotType1Behavior implements IRobotBehavior {
     return this.robotGroup;
   }
 
-  playAnimation(name: AnimationName, duration: number = waveAnimationDuration): Promise<void> {
+  // Removed duration parameter as it's now handled internally by ArmWaveAnimator
+  playAnimation(name: AnimationName): Promise<void> {
     return new Promise((resolve) => {
       if (!this.isLoaded || !this.rightArmPivot || !this.initialShoulderRotation) { // Removed elbow checks
         console.warn("Robot/Arm not fully loaded or initial state not set, cannot play animation:", name);
@@ -176,15 +171,12 @@ export class RobotType1Behavior implements IRobotBehavior {
       this.currentAnimation = name;
 
       if (name === 'wave') {
-        this.waveAnimationStartTime = null; // Reset start time, will be captured in update
-        this.animationTimer = setTimeout(() => {
-          if (this.currentAnimation === 'wave') {
-            this.currentAnimation = 'returning';
-            this.waveAnimationStartTime = null; // Clear start time when wave ends
-          }
-          this.animationTimer = null;
-          resolve();
-        }, duration);
+        // Activate the animator, optionally pass a duration if needed:
+        // this.armWaveAnimator.activate(duration); // Example if duration param was kept
+        // this.armWaveAnimator.setShowCurveVisual(true)
+        this.armWaveAnimator.activate(); // Using default duration defined in animator
+        // No need for setTimeout here anymore, animator handles its own lifecycle
+        resolve(); // Resolve immediately, animation runs in background via update loop
       } else if (name === 'idle') {
         this.currentAnimation = 'returning';
         resolve();
@@ -195,6 +187,14 @@ export class RobotType1Behavior implements IRobotBehavior {
         resolve();
       }
     });
+  }
+
+  /**
+   * Controls the visibility of the arm wave animation curve visual.
+   * @param show True to show the curve, false to hide it.
+   */
+  public setShowWaveCurve(show: boolean): void {
+    this.armWaveAnimator.setShowCurveVisual(show);
   }
 
   setToRestPose(): void {
@@ -257,23 +257,18 @@ export class RobotType1Behavior implements IRobotBehavior {
       // --- Arm Animation ---
       if (this.rightArmPivot && this.initialShoulderRotation && !this.currentAnimation.startsWith('entering')) { // Removed elbow check
         if (this.currentAnimation === 'wave') {
-          // --- Direct Rotation Wave with Relative Time ---
-          // Capture start time on the first frame
-          if (this.waveAnimationStartTime === null) {
-            this.waveAnimationStartTime = elapsedTime;
-          }
-          // Calculate elapsed time relative to the start of this specific wave animation
-          const waveElapsedTime = elapsedTime - this.waveAnimationStartTime;
+          // Delegate wave animation update to the animator
+          this.armWaveAnimator.update(elapsedTime, this.rightArmPivot);
 
-          // Apply sinusoidal rotation on X, Y, Z axes relative to initial rotation
-          // this.rightArmPivot.rotation.x = this.initialShoulderRotation.x + Math.sin(t * waveSpeed) * (waveAmplitude * 0.2);
-          // this.rightArmPivot.rotation.y = this.initialShoulderRotation.y + Math.sin(t * waveSpeed * 0.5) * (waveAmplitude * 1.0);
-          // this.rightArmPivot.rotation.z = this.initialShoulderRotation.z + Math.sin(t * waveSpeed * 0.7) * (waveAmplitude * 0.4);
-          const p = (Math.sin(waveElapsedTime * 0.5) + 1) / 2; // Use relative time
-          const targetPoint = fingertipPathCurve.getPoint(p);
-          this.rightArmPivot.lookAt(targetPoint);
+          // Check if the animator deactivated itself (duration ended)
+          if (!this.armWaveAnimator.isActive && this.currentAnimation === 'wave') { // Add check for currentAnimation
+            this.currentAnimation = 'returning'; // Switch back to returning state
+            console.log("Wave animation finished, switching to returning state.");
+          }
 
         } else { // returning or idle
+          // Ensure animator is deactivated when not waving (e.g., if switched directly to idle)
+          this.armWaveAnimator.deactivate();
           // Return to Rest or stay Idle
           if (!this.rightArmPivot.rotation.equals(this.initialShoulderRotation)) {
             this.rightArmPivot.rotation.x = THREE.MathUtils.lerp(this.rightArmPivot.rotation.x, this.initialShoulderRotation.x, returnLerpFactor);
@@ -302,14 +297,11 @@ export class RobotType1Behavior implements IRobotBehavior {
 
 
   dispose(): void {
-    if (this.curveVisual) {
-      this.curveVisual.geometry?.dispose();
-      if (this.curveVisual.material instanceof THREE.Material) {
-        this.curveVisual.material.dispose();
-      }
-      this.robotGroup?.remove(this.curveVisual); // Remove from robotGroup
-      this.curveVisual = null;
-    }
+    // Call the animator's dispose method to clean up its resources (like the curve visual)
+    this.armWaveAnimator.dispose();
+
+    // The robotGroup traversal below will handle removing the curve visual from the scene graph if it was added
+    // No need to manually remove it here anymore.
 
     this.robotGroup?.traverse(child => {
       if (child instanceof THREE.Mesh) {
