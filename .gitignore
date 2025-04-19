@@ -27,3 +27,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Large model files
+/public/assets/models/Sci-fi helmet-white.bin
