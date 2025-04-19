@@ -347,6 +347,28 @@ function App() {
     }
   };
 
+  const handlePlayWalk = () => {
+    if (currentRobotBehavior) {
+      console.log("Triggering walk animation...");
+      currentRobotBehavior.playAnimation("walk").then(() => {
+        console.log("Walk animation triggered (promise resolved immediately).");
+      });
+    } else {
+      console.warn("No robot behavior loaded to play walk animation.");
+    }
+  };
+
+  const handlePlayRun = () => {
+    if (currentRobotBehavior) {
+      console.log("Triggering run animation...");
+      currentRobotBehavior.playAnimation("run").then(() => {
+        console.log("Run animation triggered (promise resolved immediately).");
+      });
+    } else {
+      console.warn("No robot behavior loaded to play run animation.");
+    }
+  };
+
   useEffect(() => {
     if (gameState === "robot_generating") {
       setIsShaking(true);
@@ -385,6 +407,22 @@ function App() {
           style={{ marginLeft: "10px" }}
         >
           播放跳跃动画
+        </button>
+        {/* 添加行走按钮 */}
+        <button
+          onClick={handlePlayWalk}
+          disabled={!currentRobotBehavior}
+          style={{ marginLeft: "10px" }}
+        >
+          播放行走动画
+        </button>
+        {/* 添加奔跑按钮 */}
+        <button
+          onClick={handlePlayRun}
+          disabled={!currentRobotBehavior}
+          style={{ marginLeft: "10px" }}
+        >
+          播放奔跑动画
         </button>
       </div>
       <div

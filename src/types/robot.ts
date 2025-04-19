@@ -1,7 +1,7 @@
 // src/types/robot.ts
 import * as THREE from 'three';
 
-export type AnimationName = 'idle' | 'wave' | 'breathe' | 'entering' | 'jump'; // 添加 jump 动画名称
+export type AnimationName = 'idle' | 'wave' | 'breathe' | 'entering' | 'jump' | 'walk' | 'run'; // 添加 run 动画名称
 
 export interface IRobotBehavior {
   /**

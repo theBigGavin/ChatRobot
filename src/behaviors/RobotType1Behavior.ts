@@ -3,7 +3,9 @@ import * as THREE from 'three';
 import { GLTF, GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { IRobotBehavior, AnimationName } from '../types/robot';
 import { ArmWaveAnimator } from '../animations/ArmWaveAnimator'; // 导入挥手动画器
-import { JumpAnimator } from '../animations/JumpAnimator'; // 导入跳跃动画器
+import { JumpAnimator } from '../animations/JumpAnimator';     // 导入跳跃动画器
+import { WalkAnimator } from '../animations/WalkAnimator';     // 导入行走动画器
+import { RunAnimator } from '../animations/RunAnimator';       // 导入奔跑动画器
 
 // --- RobotType1 行为相关的常量 ---
 const shoulderPositionOffset = new THREE.Vector3(0, 0.4, 0); // 肩部枢轴相对于机器人中心的偏移
@@ -53,6 +55,8 @@ export class RobotType1Behavior implements IRobotBehavior {
   // --- 动画器实例 ---
   private armWaveAnimator = new ArmWaveAnimator(); // 挥手动画器实例
   private jumpAnimator = new JumpAnimator();     // 跳跃动画器实例
+  private walkAnimator = new WalkAnimator();     // 行走动画器实例
+  private runAnimator = new RunAnimator();       // 奔跑动画器实例
   // ---
 
   // 加载单个 GLTF 模型文件
@@ -172,14 +176,28 @@ export class RobotType1Behavior implements IRobotBehavior {
           this.armWaveAnimator.activate();
           break;
         case 'jump':
-          this.armWaveAnimator.deactivate(); // 开始跳跃前确保挥手停止
+          this.armWaveAnimator.deactivate(); // 确保挥手停止
+          this.walkAnimator.deactivate();  // 确保行走停止
           this.jumpAnimator.activate();
           break;
+        case 'walk':
+          this.armWaveAnimator.deactivate(); // 确保挥手停止
+          this.jumpAnimator.deactivate();  // 确保跳跃停止
+          this.walkAnimator.activate();
+          break;
+        case 'run':
+          this.armWaveAnimator.deactivate(); // 确保挥手停止
+          this.jumpAnimator.deactivate();  // 确保跳跃停止
+          this.walkAnimator.deactivate();  // 确保行走停止
+          this.runAnimator.activate();
+          break;
         case 'idle':
-          // 请求 idle 状态时，切换到 returning 让手臂平滑归位
-          // 同时确保其他独立动画器停止
+          // 请求 idle 状态时，切换到 returning 让手臂/腿平滑归位
+          // 同时确保所有独立动画器停止
           this.jumpAnimator.deactivate();
-          this.armWaveAnimator.deactivate(); // 虽然 returning 会处理，但显式停止更安全
+          this.armWaveAnimator.deactivate();
+          this.walkAnimator.deactivate();
+          this.runAnimator.deactivate();
           this.currentAnimation = 'returning';
           break;
         case 'breathe': // 呼吸动画在 update 中自动处理
@@ -215,6 +233,11 @@ export class RobotType1Behavior implements IRobotBehavior {
       // 确保所有独立动画器停止
       this.armWaveAnimator.deactivate();
       this.jumpAnimator.deactivate();
+      this.walkAnimator.deactivate();
+      this.runAnimator.deactivate();
+      // 重置行走/奔跑姿态
+      this.walkAnimator.resetPose(this.leftLegGroup, this.rightLegGroup, this.leftArmGroup, this.rightArmPivot, this.initialShoulderRotation);
+      this.runAnimator.resetPose(this.leftLegGroup, this.rightLegGroup, this.leftArmGroup, this.rightArmPivot, this.initialShoulderRotation);
     }
   }
 
@@ -229,13 +252,26 @@ export class RobotType1Behavior implements IRobotBehavior {
     } else if (this.currentAnimation === 'jump') {
       // 跳跃状态：只更新跳跃动画
       this.updateJumpAnimation(deltaTime, elapsedTime);
-      // 注意：跳跃时暂停呼吸和手臂动画
+      // 注意：跳跃时暂停呼吸和手臂/腿部动画
+    } else if (this.currentAnimation === 'walk') {
+      // 行走状态：只更新行走动画
+      this.updateWalkAnimation(elapsedTime);
+      // 注意：行走时暂停呼吸（避免冲突）和独立的挥手动画
+    } else if (this.currentAnimation === 'run') {
+      // 奔跑状态：只更新奔跑动画
+      this.updateRunAnimation(elapsedTime);
+      // 注意：奔跑时暂停呼吸和独立的挥手动画
     } else {
       // 其他状态 (idle, wave, returning)：应用呼吸和手臂动画
       this.applyBreathingEffect(elapsedTime);
-      this.updateArmAnimation(elapsedTime);
-      // 确保跳跃动画器在这些状态下是停用的 (虽然 playAnimation 和 setToRestPose 应该处理了，但多一层保险)
+      this.updateArmAnimation(elapsedTime); // 处理挥手或返回 idle
+      // 确保跳跃、行走和奔跑动画器在这些状态下是停用的
       this.jumpAnimator.deactivate();
+      this.walkAnimator.deactivate();
+      this.runAnimator.deactivate();
+      // 重置行走/奔跑姿态
+      this.walkAnimator.resetPose(this.leftLegGroup, this.rightLegGroup, this.leftArmGroup, this.rightArmPivot, this.initialShoulderRotation);
+      this.runAnimator.resetPose(this.leftLegGroup, this.rightLegGroup, this.leftArmGroup, this.rightArmPivot, this.initialShoulderRotation);
     }
   }
 
@@ -352,12 +388,46 @@ export class RobotType1Behavior implements IRobotBehavior {
     }
   }
 
+  /** 更新行走动画状态 */
+  private updateWalkAnimation(elapsedTime: number): void {
+    if (!this.walkAnimator.isActive) return;
+
+    // 委托给行走动画器，传入需要的肢体引用
+    this.walkAnimator.update(
+      elapsedTime,
+      this.leftLegGroup,
+      this.rightLegGroup,
+      this.leftArmGroup,
+      this.rightArmPivot // 传递右臂枢轴
+    );
+
+    // WalkAnimator 目前是持续动画，没有内部结束逻辑
+    // 如果需要，可以在这里添加外部停止条件
+  }
+
+  /** 更新奔跑动画状态 */
+  private updateRunAnimation(elapsedTime: number): void {
+    if (!this.runAnimator.isActive) return;
+
+    // 委托给奔跑动画器
+    this.runAnimator.update(
+      elapsedTime,
+      this.leftLegGroup,
+      this.rightLegGroup,
+      this.leftArmGroup,
+      this.rightArmPivot
+    );
+    // RunAnimator 目前也是持续动画
+  }
+
 
   /** 清理资源 */
   dispose(): void {
     // 清理动画器的资源
     this.armWaveAnimator.dispose();
-    this.jumpAnimator.dispose(); // 虽然目前为空，但保持一致性
+    this.jumpAnimator.dispose();
+    this.walkAnimator.dispose();
+    this.runAnimator.dispose(); // 添加奔跑动画器的清理
 
     // 遍历并释放机器人组内所有网格的几何体和材质资源
     this.robotGroup?.traverse(child => {
