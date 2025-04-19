@@ -16,6 +16,7 @@ import PhysicalControls from "./components/PhysicalControls";
 import { useAppStore, selectGameState } from "./store/useAppStore";
 import { RobotType1Behavior } from "./behaviors/RobotType1Behavior"; // Import behavior
 import { IRobotBehavior } from "./types/robot"; // Removed AnimationName import
+const setRobotBehavior = useAppStore.getState().setRobotBehavior; // Import action directly for use outside component body
 
 // CSS for screen shake effect
 const screenShakeStyle = `
@@ -319,9 +320,14 @@ function App() {
     console.log("Generating RobotType1Behavior...");
     // Dispose of the old behavior if it exists before creating a new one
     if (currentRobotBehavior) {
+      console.log("Disposing old robot behavior...");
       currentRobotBehavior.dispose();
+      setRobotBehavior(null); // Clear behavior from store
     }
-    setCurrentRobotBehavior(new RobotType1Behavior());
+    const newBehavior = new RobotType1Behavior();
+    setCurrentRobotBehavior(newBehavior); // Update local state
+    setRobotBehavior(newBehavior); // Set new behavior in store
+    console.log("New RobotType1Behavior created and set in store.");
     // setAnimationToPlay(null); // Reset any animation trigger
   };
 

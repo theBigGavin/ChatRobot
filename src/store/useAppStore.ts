@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import type { AppState, RobotConfig, ChatMessage, RobotState, PartType, PartDefinition, GameState, EmoteAction } from '../types';
+import type { IRobotBehavior, AnimationName } from '../types/robot'; // <-- Import robot behavior types
 import { initialPartsLibrary } from '../data/partsLibrary';
 
 // --- Constants ---
@@ -53,20 +54,10 @@ const getInitialUserName = (): string | undefined => {
   }
 };
 
-// Define the initial state values using Omit on the imported AppState type
-const initialState: Omit<AppState,
-  'setRobotConfig' |
-  'addChatMessage' |
-  'randomizeRobotConfig' |
-  'finishRandomization' |
-  'confirmPreviewConfig' |
-  'updateSyncRate' |
-  'setGameState' |
-  'setIsSpeaking' |
-  'triggerEmote' |
-  'setUserName' |
-  'updateMessageText' // <<< Add new action
-> = {
+// Define the initial state values. We let TypeScript infer the type,
+// but provide assertions for potentially ambiguous types like null or empty arrays.
+const initialState = {
+  robotBehavior: null as IRobotBehavior | null, // <-- Add type assertion for null
   robotConfig: {
     head: getDefaultPartId('head'),
     torso: getDefaultPartId('torso'),
@@ -86,10 +77,10 @@ const initialState: Omit<AppState,
       // preferences: [],
     },
   },
-  chatHistory: [],
-  gameState: 'idle',
+  chatHistory: [] as ChatMessage[], // <-- Add type assertion for empty array
+  gameState: 'idle' as GameState, // <-- Add type assertion for initial string literal type
   isSpeaking: false,
-  currentEmote: null,
+  currentEmote: null as EmoteAction, // <-- Add type assertion for null
   uiSettings: {
     ambientSound: true,
     crtGlowMode: 'medium',
@@ -204,6 +195,25 @@ export const useAppStore = create<AppState>((set) => ({
       console.log(`[Zustand DEBUG] New chatHistory length: ${newChatHistory.length}`); // Uncommented
       return { chatHistory: newChatHistory };
     }),
+
+  setRobotBehavior: (behavior: IRobotBehavior | null) => // <-- Add action to set behavior
+    set(() => ({
+      robotBehavior: behavior,
+    })),
+
+  playAnimation: async (animationName: AnimationName) => { // <-- Add playAnimation action
+    const behavior = useAppStore.getState().robotBehavior; // Use getState() to access current state
+    if (behavior) {
+      console.log(`[AppStore] Playing animation: ${animationName}`);
+      try {
+        await behavior.playAnimation(animationName);
+      } catch (error) {
+        console.error(`[AppStore] Error playing animation ${animationName}:`, error);
+      }
+    } else {
+      console.warn(`[AppStore] Cannot play animation ${animationName}: Robot behavior not loaded.`);
+    }
+  },
 
 }));
 

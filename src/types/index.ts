@@ -1,3 +1,5 @@
+import type { IRobotBehavior, AnimationName } from './robot'; // <-- Import robot behavior types
+
 // Define the possible types for robot parts
 export type PartType = 'head' | 'torso' | 'arms' | 'legs';
 
@@ -68,6 +70,7 @@ export interface AppState {
   // State properties
   robotConfig: RobotConfig;
   previewRobotConfig: RobotConfig | null;
+  robotBehavior: IRobotBehavior | null; // <-- Add robot behavior state
   robotState: RobotState;
   chatHistory: ChatMessage[];
   gameState: GameState;
@@ -91,15 +94,25 @@ export interface AppState {
   triggerEmote: (emote: EmoteAction) => void;
   setUserName: (name: string) => void;
   updateMessageText: (messageId: string, newText: string) => void; // <<< ADDED action signature
+  setRobotBehavior: (behavior: IRobotBehavior | null) => void; // <-- Add action signature
+  playAnimation: (animationName: AnimationName) => Promise<void>; // <-- Add action signature
   // other actions...
 }
 
 // --- WebSocket Message Types ---
 
+// Define the expected structure of the payload object from the server
+export interface ServerPayload {
+  text: string; // The actual text content of the chunk or full response
+  emotion?: string; // Optional: The emotion keyword associated with the response
+  // Add other potential fields if the backend sends more structured data
+}
+
 // Define the structure of messages received from the server via WebSocket
 export interface ServerMessage {
   type: "chunk" | "error" | "fullResponse" | "processing" | "idle";
-  payload: string;
+  // Payload can be the structured object or a simple string (e.g., for errors)
+  payload: ServerPayload | string;
 }
 
 // Define the structure of messages sent to the server via WebSocket
