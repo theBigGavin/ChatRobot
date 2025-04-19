@@ -31,9 +31,10 @@ export class RunAnimator {
     elapsedTime: number,
     leftLeg: THREE.Group | null,
     rightLeg: THREE.Group | null,
-    leftArm: THREE.Group | null,
+    leftArmPivot: THREE.Group | null, // 修改：接收左臂枢轴
     rightArmPivot: THREE.Group | null
-    // initialShoulderRotation: THREE.Euler | null // 暂时不需要，简化处理
+    // initialLeftShoulderRotation: THREE.Euler | null, // 暂时不需要，简化处理
+    // initialRightShoulderRotation: THREE.Euler | null
   ): void {
     if (!this.isActive) return;
 
@@ -58,12 +59,14 @@ export class RunAnimator {
 
     // 应用手臂摆动 (绕 X 轴旋转)
     // 简化处理：直接设置旋转值
-    if (leftArm) {
-      leftArm.rotation.x = -swing * ARM_SWING_ANGLE; // 与左腿反方向
+    if (leftArmPivot) { // 修改：使用 leftArmPivot
+      // 简化处理：直接设置 X 轴旋转
+      // 如果需要基于初始姿态摆动，需要传入 initialLeftShoulderRotation.x
+      leftArmPivot.rotation.x = -swing * ARM_SWING_ANGLE; // 与左腿反方向
     }
     if (rightArmPivot) {
       // 同样，简化处理，直接设置 X 轴旋转
-      // 如果需要基于初始姿态摆动，需要传入 initialShoulderRotation.x
+      // 如果需要基于初始姿态摆动，需要传入 initialRightShoulderRotation.x
       rightArmPivot.rotation.x = swing * ARM_SWING_ANGLE; // 与右腿反方向
     }
 
@@ -73,16 +76,19 @@ export class RunAnimator {
   resetPose(
     leftLeg: THREE.Group | null,
     rightLeg: THREE.Group | null,
-    leftArm: THREE.Group | null,
+    leftArmPivot: THREE.Group | null, // 修改：接收左臂枢轴
     rightArmPivot: THREE.Group | null,
-    initialShoulderRotation: THREE.Euler | null
+    initialLeftShoulderRotation: THREE.Euler | null, // 修改：接收左肩初始旋转
+    initialRightShoulderRotation: THREE.Euler | null // 修改：接收右肩初始旋转
   ): void {
     // 将腿和手臂恢复到初始或接近初始的姿态
     if (leftLeg) leftLeg.rotation.x = 0;
     if (rightLeg) rightLeg.rotation.x = 0;
-    if (leftArm) leftArm.rotation.x = 0;
-    if (rightArmPivot && initialShoulderRotation) {
-      rightArmPivot.rotation.copy(initialShoulderRotation);
+    if (leftArmPivot && initialLeftShoulderRotation) { // 修改：使用 leftArmPivot 和 initialLeftShoulderRotation
+      leftArmPivot.rotation.copy(initialLeftShoulderRotation);
+    }
+    if (rightArmPivot && initialRightShoulderRotation) { // 修改：使用 initialRightShoulderRotation
+      rightArmPivot.rotation.copy(initialRightShoulderRotation);
     }
   }
 

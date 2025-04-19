@@ -31,8 +31,8 @@ export class WalkAnimator {
     elapsedTime: number,
     leftLeg: THREE.Group | null,
     rightLeg: THREE.Group | null,
-    leftArm: THREE.Group | null, // 注意：这里是整个左臂组
-    rightArmPivot: THREE.Group | null // 右臂是通过枢轴控制的
+    leftArmPivot: THREE.Group | null, // 修改：接收左臂枢轴
+    rightArmPivot: THREE.Group | null
   ): void {
     if (!this.isActive) return;
 
@@ -58,8 +58,11 @@ export class WalkAnimator {
     // 应用手臂摆动 (绕 X 轴旋转)
     // 注意：手臂的初始旋转可能不是 0，理想情况下应该记录初始旋转并在其基础上摆动
     // 但为了简化，这里直接设置旋转值，假设初始 X 旋转接近 0
-    if (leftArm) {
-      leftArm.rotation.x = -swing * ARM_SWING_ANGLE; // 与左腿反方向
+    if (leftArmPivot) { // 修改：使用 leftArmPivot
+      // 简化处理：直接设置，可能会覆盖其他旋转，且效果依赖初始姿态
+      leftArmPivot.rotation.x = -swing * ARM_SWING_ANGLE; // 与左腿反方向
+      // 如果需要更精确控制，应该传入 initialLeftShoulderRotation.x
+      // leftArmPivot.rotation.x = initialLeftShoulderRotation.x - swing * ARM_SWING_ANGLE;
     }
     if (rightArmPivot) {
       // 假设 rightArmPivot 的初始 X 旋转是 initialShoulderRotation.x
@@ -77,16 +80,19 @@ export class WalkAnimator {
   resetPose(
     leftLeg: THREE.Group | null,
     rightLeg: THREE.Group | null,
-    leftArm: THREE.Group | null,
+    leftArmPivot: THREE.Group | null, // 修改：接收左臂枢轴
     rightArmPivot: THREE.Group | null,
-    initialShoulderRotation: THREE.Euler | null
+    initialLeftShoulderRotation: THREE.Euler | null, // 修改：接收左肩初始旋转
+    initialRightShoulderRotation: THREE.Euler | null // 修改：接收右肩初始旋转
   ): void {
     // 将腿和手臂恢复到初始或接近初始的姿态
     if (leftLeg) leftLeg.rotation.x = 0; // 假设初始为0
     if (rightLeg) rightLeg.rotation.x = 0; // 假设初始为0
-    if (leftArm) leftArm.rotation.x = 0; // 假设初始为0
-    if (rightArmPivot && initialShoulderRotation) {
-      rightArmPivot.rotation.copy(initialShoulderRotation); // 恢复记录的初始姿态
+    if (leftArmPivot && initialLeftShoulderRotation) { // 修改：使用 leftArmPivot 和 initialLeftShoulderRotation
+      leftArmPivot.rotation.copy(initialLeftShoulderRotation); // 恢复记录的初始姿态
+    }
+    if (rightArmPivot && initialRightShoulderRotation) { // 修改：使用 initialRightShoulderRotation
+      rightArmPivot.rotation.copy(initialRightShoulderRotation); // 恢复记录的初始姿态
     }
   }
 
